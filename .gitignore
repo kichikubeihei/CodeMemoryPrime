@@ -1,0 +1,28 @@
+# Build artifacts
+/target
+dist/
+build/
+
+# Local databases & logs
+*.db
+*.db-journal
+*.sqlite
+*.log
+logs/
+
+# Local environment & secrets
+.env
+.env.*
+*.key
+*.pem
+
+# IDE & AI Agent directories
+.DS_Store
+.idea/
+.vscode/
+.gemini/
+.claude/
+.cursor/
+brain/
+scratch/
+tmp/

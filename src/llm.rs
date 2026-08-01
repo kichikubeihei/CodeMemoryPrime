@@ -1,0 +1,349 @@
+use anyhow::{anyhow, Result};
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use tracing::info;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LlmConfig {
+    pub provider: String,    // "ollama" or "openai"
+    pub base_url: String,    // e.g. "http://127.0.0.1:11434" or "http://127.0.0.1:1234"
+    pub gen_model: String,   // e.g. "qwen2.5-coder:7b" or "gpt-4o-mini"
+    pub embed_model: String, // e.g. "nomic-embed-text" or "text-embedding-3-small"
+    pub api_key: String,     // optional API key
+}
+
+impl Default for LlmConfig {
+    fn default() -> Self {
+        Self {
+            provider: "ollama".to_string(),
+            base_url: "http://127.0.0.1:11434".to_string(),
+            gen_model: "qwen2.5-coder:7b".to_string(),
+            embed_model: "nomic-embed-text".to_string(),
+            api_key: "".to_string(),
+        }
+    }
+}
+
+pub fn get_config_from_db_or_env() -> LlmConfig {
+    let db_path = crate::get_db_path();
+    let _ = crate::db::init_database(&db_path);
+    let mut config = LlmConfig::default();
+
+    if let Ok(conn) = rusqlite::Connection::open(&db_path) {
+        let get_setting = |key: &str| -> Option<String> {
+            conn.query_row(
+                "SELECT value FROM system_settings WHERE key = ?1",
+                rusqlite::params![key],
+                |row| row.get(0),
+            )
+            .ok()
+        };
+
+        if let Some(p) = get_setting("llm_provider") { config.provider = p; }
+        if let Some(b) = get_setting("llm_base_url") { config.base_url = b; }
+        if let Some(g) = get_setting("llm_gen_model") { config.gen_model = g; }
+        if let Some(e) = get_setting("llm_embed_model") { config.embed_model = e; }
+        if let Some(k) = get_setting("llm_api_key") { config.api_key = k; }
+    }
+
+    // Environment variable overrides
+    if let Ok(p) = std::env::var("MCP_LLM_PROVIDER") { config.provider = p; }
+    if let Ok(b) = std::env::var("MCP_LLM_BASE_URL") { config.base_url = b; }
+    if let Ok(g) = std::env::var("MCP_LLM_GEN_MODEL") { config.gen_model = g; }
+    if let Ok(e) = std::env::var("MCP_LLM_EMBED_MODEL") { config.embed_model = e; }
+    if let Ok(k) = std::env::var("MCP_LLM_API_KEY") { config.api_key = k; }
+
+    config
+}
+
+pub fn save_config_to_db(config: &LlmConfig) -> Result<()> {
+    let db_path = std::env::var("HOME").unwrap_or("/tmp".to_string()) + "/.coder_memory.db";
+    let _ = crate::db::init_database(&db_path);
+    let conn = rusqlite::Connection::open(&db_path)?;
+
+    let settings = [
+        ("llm_provider", &config.provider),
+        ("llm_base_url", &config.base_url),
+        ("llm_gen_model", &config.gen_model),
+        ("llm_embed_model", &config.embed_model),
+        ("llm_api_key", &config.api_key),
+    ];
+
+    for (k, v) in settings {
+        conn.execute(
+            "INSERT OR REPLACE INTO system_settings (key, value) VALUES (?1, ?2)",
+            rusqlite::params![k, v],
+        )?;
+    }
+
+    Ok(())
+}
+
+pub async fn query_llm(prompt: &str) -> Result<String> {
+    let config = get_config_from_db_or_env();
+    query_llm_with_config(prompt, &config).await
+}
+
+// Backward compatibility alias
+pub async fn query_ollama(prompt: &str) -> Result<String> {
+    query_llm(prompt).await
+}
+
+pub async fn query_llm_with_config(prompt: &str, config: &LlmConfig) -> Result<String> {
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()?;
+
+    let base_url = config.base_url.trim_end_matches('/');
+
+    if config.provider.to_lowercase() == "openai" {
+        // OpenAI-compatible endpoint (/v1/chat/completions or /chat/completions)
+        let endpoint = if base_url.ends_with("/v1") {
+            format!("{}/chat/completions", base_url)
+        } else {
+            format!("{}/v1/chat/completions", base_url)
+        };
+
+        let request_body = json!({
+            "model": config.gen_model,
+            "messages": [
+                { "role": "user", "content": prompt }
+            ]
+        });
+
+        info!("Querying OpenAI-compatible API at {} with model {}", endpoint, config.gen_model);
+
+        let mut req = client.post(&endpoint).json(&request_body);
+        if !config.api_key.is_empty() {
+            req = req.header("Authorization", format!("Bearer {}", config.api_key));
+        }
+
+        let response = req.send().await?;
+        if !response.status().is_success() {
+            return Err(anyhow!("OpenAI-compatible API returned status {}: {}", response.status(), response.text().await.unwrap_or_default()));
+        }
+
+        let json_resp: Value = response.json().await?;
+        if let Some(content) = json_resp.get("choices")
+            .and_then(|c| c.get(0))
+            .and_then(|m| m.get("message"))
+            .and_then(|txt| txt.get("content"))
+            .and_then(|s| s.as_str())
+        {
+            Ok(content.to_string())
+        } else {
+            Err(anyhow!("Invalid response format from OpenAI-compatible API"))
+        }
+    } else {
+        // Default Ollama native API (/api/generate)
+        let endpoint = format!("{}/api/generate", base_url);
+        let request_body = json!({
+            "model": config.gen_model,
+            "prompt": prompt,
+            "stream": false
+        });
+
+        info!("Querying Ollama at {} with model {}", endpoint, config.gen_model);
+
+        let response = client
+            .post(&endpoint)
+            .json(&request_body)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!("Ollama API returned error: {}", response.status()));
+        }
+
+        let json_resp: Value = response.json().await?;
+        if let Some(resp) = json_resp.get("response").and_then(|r| r.as_str()) {
+            Ok(resp.to_string())
+        } else {
+            Err(anyhow!("Invalid response format from Ollama"))
+        }
+    }
+}
+
+pub async fn generate_embedding(text: &str) -> Result<Vec<f32>> {
+    let config = get_config_from_db_or_env();
+    generate_embedding_with_config(text, &config).await
+}
+
+pub async fn generate_embedding_with_config(text: &str, config: &LlmConfig) -> Result<Vec<f32>> {
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()?;
+
+    let base_url = config.base_url.trim_end_matches('/');
+
+    if config.provider.to_lowercase() == "openai" {
+        // OpenAI-compatible embeddings endpoint (/v1/embeddings or /embeddings)
+        let endpoint = if base_url.ends_with("/v1") {
+            format!("{}/embeddings", base_url)
+        } else {
+            format!("{}/v1/embeddings", base_url)
+        };
+
+        let request_body = json!({
+            "model": config.embed_model,
+            "input": text
+        });
+
+        info!("Generating embedding via OpenAI-compatible API at {}", endpoint);
+
+        let mut req = client.post(&endpoint).json(&request_body);
+        if !config.api_key.is_empty() {
+            req = req.header("Authorization", format!("Bearer {}", config.api_key));
+        }
+
+        let response = req.send().await?;
+        if !response.status().is_success() {
+            return Err(anyhow!("OpenAI-compatible embedding API returned status {}", response.status()));
+        }
+
+        let json_resp: Value = response.json().await?;
+        if let Some(embedding) = json_resp.get("data")
+            .and_then(|d| d.get(0))
+            .and_then(|item| item.get("embedding"))
+            .and_then(|e| e.as_array())
+        {
+            let vec: Result<Vec<f32>, _> = embedding.iter()
+                .map(|v| v.as_f64().ok_or(anyhow!("Invalid float in embedding")))
+                .map(|res: Result<f64, anyhow::Error>| res.map(|f| f as f32))
+                .collect();
+            vec
+        } else {
+            Err(anyhow!("No embedding field in OpenAI response"))
+        }
+    } else {
+        // Ollama native embeddings API (/api/embeddings)
+        let endpoint = format!("{}/api/embeddings", base_url);
+        let request_body = json!({
+            "model": config.embed_model,
+            "prompt": text
+        });
+
+        info!("Generating embedding via Ollama at {}", endpoint);
+
+        let response = client
+            .post(&endpoint)
+            .json(&request_body)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!("Ollama API returned error: {}", response.status()));
+        }
+
+        let json_resp: Value = response.json().await?;
+        if let Some(embedding) = json_resp.get("embedding").and_then(|e| e.as_array()) {
+            let vec: Result<Vec<f32>, _> = embedding.iter()
+                .map(|v| v.as_f64().ok_or(anyhow!("Invalid float in embedding")))
+                .map(|res: Result<f64, anyhow::Error>| res.map(|f| f as f32))
+                .collect();
+            vec
+        } else {
+            Err(anyhow!("No embedding field in Ollama response"))
+        }
+    }
+}
+
+pub async fn check_ollama_connection() -> Result<()> {
+    let config = get_config_from_db_or_env();
+    let client = Client::new();
+    let res = client.get(&format!("{}/api/tags", config.base_url)).send().await?;
+    if res.status().is_success() {
+        Ok(())
+    } else {
+        Err(anyhow!("Status code {}", res.status()))
+    }
+}
+
+pub async fn fetch_available_models(base_url: &str) -> Result<Vec<String>> {
+    let client = Client::builder().timeout(std::time::Duration::from_secs(5)).build()?;
+    let clean_url = base_url.trim_end_matches('/');
+
+    // 1. Try Ollama tags API (/api/tags)
+    let tags_url = format!("{}/api/tags", clean_url);
+    if let Ok(res) = client.get(&tags_url).send().await {
+        if res.status().is_success() {
+            if let Ok(json_resp) = res.json::<Value>().await {
+                if let Some(models) = json_resp.get("models").and_then(|m| m.as_array()) {
+                    let names: Vec<String> = models.iter()
+                        .filter_map(|m| m.get("name").and_then(|s| s.as_str()).map(|s| s.to_string()))
+                        .collect();
+                    return Ok(names);
+                }
+            }
+        }
+    }
+
+    // 2. Try OpenAI models endpoint (/v1/models or /models)
+    let models_url = if clean_url.ends_with("/v1") {
+        format!("{}/models", clean_url)
+    } else {
+        format!("{}/v1/models", clean_url)
+    };
+
+    if let Ok(res) = client.get(&models_url).send().await {
+        if res.status().is_success() {
+            if let Ok(json_resp) = res.json::<Value>().await {
+                if let Some(data) = json_resp.get("data").and_then(|d| d.as_array()) {
+                    let names: Vec<String> = data.iter()
+                        .filter_map(|m| m.get("id").and_then(|s| s.as_str()).map(|s| s.to_string()))
+                        .collect();
+                    return Ok(names);
+                }
+            }
+        }
+    }
+
+    Err(anyhow!("Could not reach LLM endpoint at '{}'", base_url))
+}
+
+pub async fn auto_detect_llm_setup() -> String {
+    let cfg = get_config_from_db_or_env();
+
+    match fetch_available_models(&cfg.base_url).await {
+        Ok(models) if !models.is_empty() => {
+            let mut out = format!(
+                "=== LLM Setup Detected at `{}` ===\n\n", cfg.base_url
+            );
+            out.push_str(&format!("- **Provider**: {}\n", cfg.provider));
+            out.push_str(&format!("- **Active Generation Model**: `{}`\n", cfg.gen_model));
+            out.push_str(&format!("- **Active Embedding Model**: `{}`\n\n", cfg.embed_model));
+
+            out.push_str(&format!("### Available Local Models ({} detected):\n", models.len()));
+            for m in &models {
+                let is_gen = m.contains(&cfg.gen_model);
+                let is_emb = m.contains(&cfg.embed_model);
+                let tag = match (is_gen, is_emb) {
+                    (true, true) => " [ACTIVE GEN & EMBED]",
+                    (true, false) => " [ACTIVE GEN]",
+                    (false, true) => " [ACTIVE EMBED]",
+                    _ => "",
+                };
+                out.push_str(&format!("  - `{}`{}\n", m, tag));
+            }
+
+            out.push_str("\n### To change selected models:\n");
+            out.push_str("Call tool `configure_settings` with:\n");
+            out.push_str("```json\n{\n  \"action\": \"set\",\n");
+            out.push_str(&format!("  \"gen_model\": \"<chosen_gen_model>\",\n  \"embed_model\": \"<chosen_embed_model>\"\n}}\n```"));
+            out
+        }
+        Ok(_) => {
+            format!(
+                "=== Local LLM Server Detected at `{}` but NO models are installed ===\n\nTo install standard models via Ollama:\n```bash\nollama pull qwen2.5-coder:7b\nollama pull nomic-embed-text\n```\nAfter pulling, re-run `configure_settings`.",
+                cfg.base_url
+            )
+        }
+        Err(_) => {
+            format!(
+                "=== No Active LLM Endpoint Found at `{}` ===\n\nCodeMemoryPrime requires a local LLM or API endpoint to generate code embeddings and answer RAG queries.\n\n### Option A: Use Local Ollama (Recommended / Free)\n1. Install & start Ollama: https://ollama.com\n2. Run in terminal:\n   ```bash\n   ollama pull qwen2.5-coder:7b\n   ollama pull nomic-embed-text\n   ```\n\n### Option B: Use OpenAI / LM Studio / LocalAI\nCall tool `configure_settings`:\n```json\n{{\n  \"action\": \"set\",\n  \"provider\": \"openai\",\n  \"base_url\": \"http://localhost:1234/v1\",\n  \"gen_model\": \"your-model-name\",\n  \"embed_model\": \"your-embed-name\",\n  \"api_key\": \"lm-studio\"\n}}\n```",
+                cfg.base_url
+            )
+        }
+    }
+}
