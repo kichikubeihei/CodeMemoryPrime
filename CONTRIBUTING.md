@@ -1,45 +1,52 @@
-# Contributing to CodeMemoryPrime (CMP)
+# Contributing to CodeMemoryPrime (cmp)
 
-Thank you for your interest in contributing to **CodeMemoryPrime (CMP)**! We welcome bug fixes, documentation improvements, new MCP tools, and performance optimizations.
+```
++-----------------------------------------------------------------------+
+|  ___ _  _ ___                                                        |
+| / __| || | _ \  CodeMemoryPrime (cmp)                                 |
+| | (__| __ |  _/  Contributing Guide                                   |
+| \___|_||_|_|                                                          |
++-----------------------------------------------------------------------+
+```
+
+First off, thanks for wanting to help out! Whether you're fixing a typo, adding a new MCP tool, or speeding up something under the hood, all contributions are appreciated.
 
 ---
 
-## 🛠️ Development Setup
+[ What You Need ]
 
-### Prerequisites
-- [Rust](https://www.rust-lang.org/tools/install) (1.75 or newer)
-- [Ollama](https://ollama.com) (or an OpenAI-compatible local endpoint like LM Studio)
+- Rust 1.75 or newer installed on your machine.
+- Ollama (or any local LLM provider like LM Studio) running locally if you want to test AI tools.
 
-### Building & Testing Locally
+---
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/your-username/CodeMemoryPrime.git
+[ How to Build & Run Tests ]
+
+1. Grab the code:
+   git clone https://github.com/rickieblevins/CodeMemoryPrime.git
    cd CodeMemoryPrime
-   ```
 
-2. **Run tests**:
-   ```bash
+2. Run the test suite:
    cargo test
-   ```
 
-3. **Build release binary**:
-   ```bash
+3. Build the binary:
    cargo build --release
-   ```
+
+The binary will build at ./target/release/cmp
 
 ---
 
-## 🧩 Adding a New MCP Tool
+[ Want to add a new MCP Tool? ]
 
-To add a new tool to **CodeMemoryPrime**:
-1. Open `src/tools/` and choose the appropriate domain file (e.g., `codebase.rs`, `file_ops.rs`, `refactor.rs`).
-2. Add your JSON schema definition to `list_schemas()`.
-3. Add your execution logic to `handle_call()`.
-4. Compile and verify with `cargo build --release`.
+Adding tools is pretty straightforward:
+
+1. Head over to `src/tools/` and pick the right domain file (like `codebase.rs`, `refactor.rs`, or `file_ops.rs`).
+2. Add your tool's JSON schema definition inside `list_schemas()`.
+3. Add your tool's logic inside `handle_call()`.
+4. Run `cargo test` to make sure everything compiles cleanly!
 
 ---
 
-## 📜 Licensing Guidelines
+[ License Note ]
 
-CodeMemoryPrime is licensed under the **Business Source License 1.1 (BSL 1.1)**. All contributions submitted to this repository will be covered by the same license terms.
+CodeMemoryPrime uses the Business Source License 1.1 (BSL 1.1). Any contributions you submit will fall under the same license.

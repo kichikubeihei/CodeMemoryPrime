@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Sha256, Digest};
 use hex;
 
-// Default Ed25519 public key (32 bytes base64-encoded) for divIDEr / mcp-coder-memory BSL 1.1 commercial licensing.
-const DEFAULT_PUBLIC_KEY_B64: &str = "MCowBQYDK2VwAyEA9gM2V3t5+44QfP+7bZ0+S1H4s0J4vW8/Q8y+1H1w3p8=";
+// Default Ed25519 public key (32 bytes base64-encoded) for divider / mcp-coder-memory BSL 1.1 commercial licensing.
+const DEFAULT_PUBLIC_KEY_B64: &str = "453G9lTA37XHXhDe+sw/yoEIjybAtP/cNWhlJpnvvx8=";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LicensePayload {
@@ -34,7 +34,7 @@ pub fn check_license_key(key_str: Option<&str>) -> LicenseStatus {
         _ => match std::env::var("CMP_LICENSE_KEY").or_else(|_| std::env::var("DIVIDER_LICENSE_KEY")) {
             Ok(k) if !k.trim().is_empty() => k,
             _ => return LicenseStatus::FreeTier {
-                message: "Running CodeMemoryPrime (CMP) BSL 1.1 Free Tier (Personal/Evaluation Use). For commercial team licensing, visit https://codememoryprime.com/license".to_string()
+                message: "Running CodeMemoryPrime (CMP) BSL 1.1 Free Tier (Personal/Evaluation Use). For commercial team licensing, visit https://www.codememoryprime.com".to_string()
             },
         },
     };
@@ -72,22 +72,28 @@ pub fn check_license_key(key_str: Option<&str>) -> LicenseStatus {
     }
 
     // Verify Ed25519 signature
-    if sig_bytes.len() == 64 {
-        let sig = Signature::from_bytes(&sig_bytes.try_into().unwrap());
-        if let Ok(pub_bytes) = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, DEFAULT_PUBLIC_KEY_B64) {
-            if pub_bytes.len() == 32 {
-                if let Ok(verifying_key) = VerifyingKey::from_bytes(&pub_bytes.try_into().unwrap()) {
-                    if verifying_key.verify(&payload_bytes, &sig).is_ok() {
-                        return LicenseStatus::ValidCommercial {
-                            licensee: payload.licensee,
-                            seats: payload.seats,
-                            expires: payload.expires,
-                            license_type: payload.license_type,
-                        };
-                    }
-                }
-            }
-        }
+    if sig_bytes.len() != 64 {
+        return LicenseStatus::Invalid { reason: "Signature length must be 64 bytes.".to_string() };
+    }
+
+    let sig = Signature::from_bytes(&sig_bytes.try_into().unwrap());
+    
+    let pub_bytes = match base64::Engine::decode(&base64::engine::general_purpose::STANDARD, DEFAULT_PUBLIC_KEY_B64) {
+        Ok(b) => b,
+        Err(_) => return LicenseStatus::Invalid { reason: "Failed to decode compiled public key.".to_string() },
+    };
+
+    if pub_bytes.len() != 32 {
+        return LicenseStatus::Invalid { reason: "Compiled public key is not 32 bytes.".to_string() };
+    }
+
+    let verifying_key = match VerifyingKey::from_bytes(&pub_bytes.try_into().unwrap()) {
+        Ok(vk) => vk,
+        Err(_) => return LicenseStatus::Invalid { reason: "Failed to parse compiled public key.".to_string() },
+    };
+
+    if verifying_key.verify(&payload_bytes, &sig).is_err() {
+        return LicenseStatus::Invalid { reason: "Signature verification failed.".to_string() };
     }
 
     LicenseStatus::ValidCommercial {
@@ -97,3 +103,86 @@ pub fn check_license_key(key_str: Option<&str>) -> LicenseStatus {
         license_type: payload.license_type,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ed25519_dalek::{SigningKey, Signer};
+    use base64::Engine;
+
+    #[test]
+    fn test_invalid_license_format() {
+        let res = check_license_key(Some("CMP-LICENSE-badpayload.badsig"));
+        assert!(matches!(res, LicenseStatus::Invalid { .. }));
+    }
+
+    #[test]
+    fn test_signature_verification_failure() {
+        let payload = LicensePayload {
+            licensee: "Tester".to_string(),
+            seats: 2,
+            expires: "2099-01-01".to_string(),
+            license_type: "commercial".to_string(),
+        };
+        let payload_json = serde_json::to_vec(&payload).unwrap();
+        let payload_b64 = base64::engine::general_purpose::STANDARD.encode(&payload_json);
+        
+        let dummy_sig = [0u8; 64];
+        let sig_b64 = base64::engine::general_purpose::STANDARD.encode(&dummy_sig);
+        
+        let key = format!("CMP-LICENSE-{}.{}", payload_b64, sig_b64);
+        let res = check_license_key(Some(&key));
+        
+        match res {
+            LicenseStatus::Invalid { reason } => {
+                println!("DEBUG REASON: {}", reason);
+                assert!(reason.contains("Signature verification failed"));
+            }
+            other => panic!("Expected Invalid status, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_expired_license() {
+        let payload = LicensePayload {
+            licensee: "Expired Tester".to_string(),
+            seats: 2,
+            expires: "2020-01-01".to_string(),
+            license_type: "commercial".to_string(),
+        };
+        let payload_json = serde_json::to_vec(&payload).unwrap();
+        let payload_b64 = base64::engine::general_purpose::STANDARD.encode(&payload_json);
+        
+        let dummy_sig = [0u8; 64];
+        let sig_b64 = base64::engine::general_purpose::STANDARD.encode(&dummy_sig);
+        
+        let key = format!("CMP-LICENSE-{}.{}", payload_b64, sig_b64);
+        let res = check_license_key(Some(&key));
+        
+        match res {
+            LicenseStatus::Expired { licensee, expires } => {
+                assert_eq!(licensee, "Expired Tester");
+                assert_eq!(expires, "2020-01-01");
+            }
+            other => panic!("Expected Expired status, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_valid_license_flow() {
+        let signing_key = SigningKey::from_bytes(&[1u8; 32]);
+        let verifying_key = signing_key.verifying_key();
+        
+        let payload = LicensePayload {
+            licensee: "Valid User".to_string(),
+            seats: 10,
+            expires: "2099-12-31".to_string(),
+            license_type: "commercial".to_string(),
+        };
+        let payload_json = serde_json::to_vec(&payload).unwrap();
+        let sig = signing_key.sign(&payload_json);
+        
+        assert!(verifying_key.verify(&payload_json, &sig).is_ok());
+    }
+}
+

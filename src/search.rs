@@ -264,6 +264,31 @@ pub fn query_hybrid_documentation(
     }
     
     let mut combined: Vec<(String, f64)> = rrf_scores.into_iter().collect();
+    
+    if !combined.is_empty() {
+        let placeholders: Vec<String> = combined.iter().map(|_| "?".to_string()).collect();
+        let query = format!(
+            "SELECT fd.id, COUNT(fdep.id) FROM framework_documentation fd JOIN framework_dependencies fdep ON fd.url = fdep.target_url WHERE fd.id IN ({}) GROUP BY fd.id",
+            placeholders.join(",")
+        );
+        let params_vec: Vec<String> = combined.iter().map(|(id, _)| id.clone()).collect();
+        if let Ok(mut stmt) = conn.prepare(&query) {
+            if let Ok(mut rows) = stmt.query(rusqlite::params_from_iter(params_vec.iter())) {
+                let mut boosts: HashMap<String, f64> = HashMap::new();
+                while let Ok(Some(row)) = rows.next() {
+                    let id: String = row.get(0).unwrap();
+                    let count: i64 = row.get(1).unwrap();
+                    boosts.insert(id, count as f64);
+                }
+                for (id, score) in combined.iter_mut() {
+                    if let Some(&count) = boosts.get(id) {
+                        *score += count * 0.005; // 0.005 boost per incoming link
+                    }
+                }
+            }
+        }
+    }
+
     combined.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     combined.truncate(limit);
     

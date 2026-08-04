@@ -31,7 +31,9 @@ pub fn list_schemas() -> Vec<Value> {
                     "base_url": { "type": "string", "description": "LLM endpoint URL." },
                     "gen_model": { "type": "string", "description": "Generation model name." },
                     "embed_model": { "type": "string", "description": "Embedding model name." },
-                    "api_key": { "type": "string", "description": "API key." }
+                    "api_key": { "type": "string", "description": "API key." },
+                    "use_framework_grounding": { "type": "boolean", "description": "Use RAG framework specs for code generation." },
+                    "framework_grounding_chunks": { "type": "integer", "description": "Number of RAG chunks to include (max 10)." }
                 }
             }
         })
@@ -151,13 +153,17 @@ pub fn handle_call(name: &str, params: &Value, rt: &Runtime) -> Option<String> {
                     if let Some(g) = params.get("gen_model").and_then(|s| s.as_str()) { current.gen_model = g.to_string(); }
                     if let Some(e) = params.get("embed_model").and_then(|s| s.as_str()) { current.embed_model = e.to_string(); }
                     if let Some(k) = params.get("api_key").and_then(|s| s.as_str()) { current.api_key = k.to_string(); }
+                    if let Some(b) = params.get("use_framework_grounding").and_then(|s| s.as_bool()) { current.use_framework_grounding = b; }
+                    if let Some(c) = params.get("framework_grounding_chunks").and_then(|s| s.as_u64()) { 
+                        current.framework_grounding_chunks = std::cmp::min(c as usize, 10); 
+                    }
 
                     match llm::save_config_to_db(&current) {
                         Ok(_) => {
                             let auto_info = rt.block_on(async { llm::auto_detect_llm_setup().await });
-                            Some(format!("=== LLM Settings Updated ===\n- Provider: {}\n- Base URL: {}\n- Generation Model: {}\n- Embedding Model: {}\n- API Key: {}\n\n{}",
+                            Some(format!("=== LLM Settings Updated ===\n- Provider: {}\n- Base URL: {}\n- Generation Model: {}\n- Embedding Model: {}\n- API Key: {}\n- RAG Grounding: {} ({} chunks)\n\n{}",
                                 current.provider, current.base_url, current.gen_model, current.embed_model,
-                                if current.api_key.is_empty() { "(None)" } else { "***set***" }, auto_info))
+                                if current.api_key.is_empty() { "(None)" } else { "***set***" }, current.use_framework_grounding, current.framework_grounding_chunks, auto_info))
                         }
                         Err(err) => Some(format!("Error saving settings to database: {}", err)),
                     }

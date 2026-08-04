@@ -1,65 +1,84 @@
 use std::fs;
 use std::path::Path;
 use regex::Regex;
+use pulldown_cmark::{Parser, Event, Tag, TagEnd};
+use scraper::{Html, Selector};
 
 #[derive(Debug, Clone)]
 pub struct DocBlock {
     pub title: String,
     pub url: String,
     pub content: String,
+    pub links: Vec<(String, String)>,
 }
 
 pub fn parse_local_markdown_docs(folder_path: &str) -> Vec<DocBlock> {
     let mut chunks = Vec::new();
-    let header_re = Regex::new(r"(?m)^(#+)\s+(.*?)$").unwrap();
     
-    fn walk_dir(dir: &Path, chunks: &mut Vec<DocBlock>, header_re: &Regex) {
+    fn walk_dir(dir: &Path, chunks: &mut Vec<DocBlock>) {
         if let Ok(entries) = fs::read_dir(dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.is_dir() {
-                    walk_dir(&path, chunks, header_re);
+                    walk_dir(&path, chunks);
                 } else if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
                     if ["md", "markdown", "txt"].contains(&ext.to_lowercase().as_str()) {
                         if let Ok(content) = fs::read_to_string(&path) {
                             let file_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("file");
                             let file_url = format!("file://{}", path.to_string_lossy());
                             
-                            let mut matches: Vec<(usize, usize, &str, &str)> = Vec::new();
-                            for cap in header_re.captures_iter(&content) {
-                                let mat = cap.get(0).unwrap();
-                                let level = cap.get(1).unwrap().as_str();
-                                let title = cap.get(2).unwrap().as_str().trim();
-                                matches.push((mat.start(), mat.end(), level, title));
+                            let mut current_content = String::new();
+                            let mut current_links = Vec::new();
+                            let mut breadcrumbs = vec![file_name.to_string()];
+                            let mut in_heading = false;
+                            let mut heading_text = String::new();
+                            let mut heading_level = 1;
+                            
+                            for event in Parser::new(&content) {
+                                match event {
+                                    Event::Start(Tag::Heading { level, .. }) => {
+                                        let trimmed = current_content.trim();
+                                        if trimmed.len() > 30 {
+                                            chunks.push(DocBlock {
+                                                title: breadcrumbs.join(" > "),
+                                                url: file_url.clone(),
+                                                content: trimmed.to_string(),
+                                                links: std::mem::take(&mut current_links),
+                                            });
+                                        }
+                                        current_content.clear();
+                                        in_heading = true;
+                                        heading_text.clear();
+                                        heading_level = level as usize;
+                                    }
+                                    Event::End(TagEnd::Heading(..)) => {
+                                        in_heading = false;
+                                        breadcrumbs.truncate(heading_level);
+                                        breadcrumbs.push(heading_text.trim().to_string());
+                                    }
+                                    Event::Start(Tag::Link { dest_url, title, .. }) => {
+                                        current_links.push((title.to_string(), dest_url.to_string()));
+                                    }
+                                    Event::Text(t) | Event::Code(t) => {
+                                        if in_heading {
+                                            heading_text.push_str(&t);
+                                        } else {
+                                            current_content.push_str(&t);
+                                            current_content.push('\n');
+                                        }
+                                    }
+                                    _ => {}
+                                }
                             }
                             
-                            if matches.is_empty() {
-                                if !content.trim().is_empty() {
-                                    chunks.push(DocBlock {
-                                        title: file_name.to_string(),
-                                        url: file_url,
-                                        content: content.trim().to_string(),
-                                    });
-                                }
-                                continue;
-                            }
-                            
-                            for idx in 0..matches.len() {
-                                let (_, start_idx, _, title) = matches[idx];
-                                let end_idx = if idx + 1 < matches.len() {
-                                    matches[idx + 1].0
-                                } else {
-                                    content.len()
-                                };
-                                
-                                let section_content = content[start_idx..end_idx].trim().to_string();
-                                if section_content.len() > 30 {
-                                    chunks.push(DocBlock {
-                                        title: format!("{} - {}", file_name, title),
-                                        url: file_url.clone(),
-                                        content: section_content,
-                                    });
-                                }
+                            let trimmed = current_content.trim();
+                            if trimmed.len() > 30 {
+                                chunks.push(DocBlock {
+                                    title: breadcrumbs.join(" > "),
+                                    url: file_url.clone(),
+                                    content: trimmed.to_string(),
+                                    links: current_links,
+                                });
                             }
                         }
                     }
@@ -68,7 +87,7 @@ pub fn parse_local_markdown_docs(folder_path: &str) -> Vec<DocBlock> {
         }
     }
     
-    walk_dir(Path::new(folder_path), &mut chunks, &header_re);
+    walk_dir(Path::new(folder_path), &mut chunks);
     chunks
 }
 
@@ -94,37 +113,60 @@ pub async fn scrape_web_docs(url: &str) -> Vec<DocBlock> {
         }
     };
     
-    let script_style_re = Regex::new(r"(?s)<(script|style|nav|footer|header|head|aside).*?>.*?<\/\1>").unwrap();
-    let clean_html = script_style_re.replace_all(&html, "").to_string();
+    let tags = ["script", "style", "nav", "footer", "header", "head", "aside"];
+    let mut clean_html = html.clone();
+    for tag in tags {
+        let pattern = format!(r"(?is)<{}\b[^>]*>.*?</{}>", tag, tag);
+        let re = Regex::new(&pattern).unwrap();
+        clean_html = re.replace_all(&clean_html, "").to_string();
+    }
     
-    let element_re = Regex::new(r"(?s)<(h1|h2|h3|h4|h5|h6|p|li|pre|code|div).*?>(.*?)<\/\1>").unwrap();
-    let strip_tags_re = Regex::new(r"<[^>]*>").unwrap();
-    
+    let document = Html::parse_document(&clean_html);
     let mut chunks = Vec::new();
-    let mut current_header = "Documentation Page".to_string();
     
-    for cap in element_re.captures_iter(&clean_html) {
-        let tag = cap.get(1).unwrap().as_str();
-        let inner_html = cap.get(2).unwrap().as_str();
+    let mut current_title = "Documentation Page".to_string();
+    let mut current_content = String::new();
+    let mut current_links = Vec::new();
+    
+    let selector = Selector::parse("h1, h2, h3, h4, h5, h6, p, li, pre").unwrap();
+    let a_selector = Selector::parse("a").unwrap();
+    
+    for element in document.select(&selector) {
+        let tag = element.value().name();
+        let text = element.text().collect::<Vec<_>>().join(" ").trim().to_string();
         
-        let cleaned_text = strip_tags_re.replace_all(inner_html, "").to_string();
-        let txt = cleaned_text.trim();
-        if txt.is_empty() || txt.len() <= 20 {
-            continue;
-        }
-        
-        let whitespace_re = Regex::new(r"\s+").unwrap();
-        let clean_txt = whitespace_re.replace_all(txt, " ").to_string();
-        
-        if tag.starts_with('h') {
-            current_header = clean_txt.clone();
+        if tag.starts_with('h') && tag.len() == 2 {
+            if current_content.trim().len() > 30 {
+                chunks.push(DocBlock {
+                    title: current_title.clone(),
+                    url: url.to_string(),
+                    content: current_content.trim().to_string(),
+                    links: std::mem::take(&mut current_links),
+                });
+            }
+            current_content.clear();
+            current_title = text;
         } else {
-            chunks.push(DocBlock {
-                title: current_header.clone(),
-                url: url.to_string(),
-                content: clean_txt,
-            });
+            if !text.is_empty() {
+                current_content.push_str(&text);
+                current_content.push_str("\n\n");
+            }
+            for a in element.select(&a_selector) {
+                if let Some(href) = a.value().attr("href") {
+                    let a_text = a.text().collect::<Vec<_>>().join(" ").trim().to_string();
+                    current_links.push((a_text, href.to_string()));
+                }
+            }
         }
+    }
+    
+    if current_content.trim().len() > 30 {
+        chunks.push(DocBlock {
+            title: current_title,
+            url: url.to_string(),
+            content: current_content.trim().to_string(),
+            links: current_links,
+        });
     }
     
     chunks

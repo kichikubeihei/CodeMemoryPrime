@@ -22,7 +22,7 @@ You are granted permission to use the Licensed Work for:
 Any use of the Licensed Work that exceeds the Additional Use Grant (including use by organizations with more than 3 developers or over $100,000 USD in annual revenue) requires a paid **Commercial License**.
 
 To purchase a Commercial License or Enterprise License, visit:
-**[https://codememoryprime.com/license](https://codememoryprime.com/license)** or contact `licensing@codememoryprime.com`.
+**[https://www.codememoryprime.com](https://www.codememoryprime.com)** or contact `license@rickieblevins.com`.
 
 ---
 

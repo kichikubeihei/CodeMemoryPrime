@@ -1,109 +1,93 @@
-# CodeMemoryPrime (CMP) 🚀
+# CodeMemoryPrime (cmp)
 
-> **The Blazing-Fast, Rust-Powered MCP Codebase Intelligence & Persistent Memory Engine for AI Coding Agents.**
+```
++-----------------------------------------------------------------------+
+|  ___ _  _ ___                                                        |
+| / __| || | _ \  CodeMemoryPrime (cmp)                                 |
+| | (__| __ |  _/  A lightweight memory & codebase helper for AI tools |
+| \___|_||_|_|                                                          |
++-----------------------------------------------------------------------+
+```
 
 [![License: BSL-1.1](https://img.shields.io/badge/License-BSL_1.1-blue.svg)](LICENSE.md)
 [![Language: Rust](https://img.shields.io/badge/Language-Rust-orange.svg)](https://www.rust-lang.org/)
-[![MCP Spec: 2024-11-05](https://img.shields.io/badge/MCP_Spec-2024--11--05-green.svg)](https://modelcontextprotocol.io)
 
-**CodeMemoryPrime (CMP)** is a single-binary, high-performance Model Context Protocol (MCP) server that connects local AI coding assistants (Claude Desktop, Cursor, Windsurf, Gemini CLI, Antigravity) to an AST-aware codebase RAG engine, factual memory store, and comprehensive developer toolkit.
+CodeMemoryPrime (CMP) is a small, fast tool that gives your AI coding assistant (like Claude Desktop, Cursor, or Windsurf) a long-term memory. 
 
----
-
-## ✨ Key Features
-
-- **🚀 Sub-200ms Re-Indexing**: Uses **Sub-Chunk SHA-256 Incremental Hashing** to skip untouched functions and re-index modified codebases in **0.192 seconds**.
-- **🌳 AST Parent-Child Context**: Parses Tree-sitter language ASTs, attaching file imports and parent struct/class signatures directly to function snippets so LLMs never lose type context.
-- **⚡ Single Compiled Native Binary**: Written in pure Rust with zero Node.js/npm or Python runtime dependencies. Boots in under 1ms.
-- **🔍 Hybrid RRF RAG Search**: Combines semantic vector similarity, FTS5 keyword search, Reciprocal Rank Fusion (RRF), and dependency graph cross-referencing.
-- **🛠️ 31 Integrated Developer Tools**: Complete suite including AST indexing, memory consolidation, file patching (`patch_file`), safe command execution, unified `git` CLI, refactoring, and project health checks.
-- **🤖 Provider Agnostic**: Works natively with local **Ollama** (`qwen2.5-coder`, `nomic-embed-text`) or any OpenAI-compatible API (**LM Studio**, **vLLM**, **OpenAI**, **Groq**).
-- **💡 Built-in Auto-Detection & Setup**: Automatically detects running local LLM endpoints, lists available local models, and provides actionable setup guidance.
+If you've ever had an AI forget how your project works halfway through a chat, or waste your API tokens re-reading the same files over and over, this fixes that. It indexes your codebase locally so your AI assistant can instantly look up functions, remember architectural decisions, and check documentation without getting confused.
 
 ---
 
-## 🚀 Quick Start
+[ What makes it useful? ]
 
-### 1. Build from Source
-```bash
-git clone https://github.com/your-username/CodeMemoryPrime.git
-cd CodeMemoryPrime
-cargo build --release
-```
-The compiled binary will be located at `./target/release/cmp`.
+- Instant Re-indexing: When you save a file, it only re-indexes what changed (usually takes less than 0.2 seconds).
+- Doesn't Lose Context: When it looks up a function, it keeps the surrounding class, struct, and import info so the AI actually understands how the code fits together.
+- No Heavy Setup: It's a single compiled binary written in Rust. No installing Node packages, Python environments, or extra background services.
+- Keeps Memory Between Sessions: Saves project facts, rules, and decisions so you don't have to re-explain your setup every time you open a new chat.
+- Works Offline: Integrates natively with local Ollama models (like qwen2.5-coder and nomic-embed-text) or local endpoints like LM Studio.
 
 ---
 
-### 2. Configure Your MCP Client
+[ Quick Start ]
 
-Add **CodeMemoryPrime** to your client configuration file:
+1. Build from source:
 
-#### 🔹 Ollama Configuration (Default / Free & Local)
-```json
-{
-  "mcpServers": {
-    "CodeMemoryPrime": {
-      "command": "/path/to/CodeMemoryPrime/target/release/cmp",
-      "args": [],
-      "env": {
-        "MCP_LLM_PROVIDER": "ollama",
-        "MCP_LLM_BASE_URL": "http://127.0.0.1:11434",
-        "MCP_LLM_GEN_MODEL": "qwen2.5-coder:7b",
-        "MCP_LLM_EMBED_MODEL": "nomic-embed-text"
-      }
-    }
-  }
-}
-```
+   git clone https://github.com/rickieblevins/CodeMemoryPrime.git
+   cd CodeMemoryPrime
+   cargo build --release
 
-#### 🔹 LM Studio / OpenAI / vLLM Configuration
-```json
-{
-  "mcpServers": {
-    "CodeMemoryPrime": {
-      "command": "/path/to/CodeMemoryPrime/target/release/cmp",
-      "args": [],
-      "env": {
-        "MCP_LLM_PROVIDER": "openai",
-        "MCP_LLM_BASE_URL": "http://localhost:1234/v1",
-        "MCP_LLM_GEN_MODEL": "qwen2.5-coder-7b-instruct",
-        "MCP_LLM_EMBED_MODEL": "text-embedding-nomic-embed-text-v1.5",
-        "MCP_LLM_API_KEY": "lm-studio"
-      }
-    }
-  }
-}
-```
+   Your binary will be ready at ./target/release/cmp
 
-#### Config File Locations:
-- **Claude Desktop**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Cursor**: `~/.cursor/mcp.json`
-- **Windsurf**: `~/.codeium/windsurf/mcp_config.json`
-- **Gemini CLI / Antigravity**: `~/.gemini/mcp_config.json`
+2. Plug it into your AI assistant:
+
+   Add CodeMemoryPrime to your client configuration file. 
+
+   For Ollama (Free & Local):
+
+   {
+     "mcpServers": {
+       "CodeMemoryPrime": {
+         "command": "/path/to/CodeMemoryPrime/target/release/cmp",
+         "args": [],
+         "env": {
+           "MCP_LLM_PROVIDER": "ollama",
+           "MCP_LLM_BASE_URL": "http://127.0.0.1:11434",
+           "MCP_LLM_GEN_MODEL": "qwen2.5-coder:7b",
+           "MCP_LLM_EMBED_MODEL": "nomic-embed-text"
+         }
+       }
+     }
+   }
+
+   Where to find your config file:
+   - Claude Desktop: ~/Library/Application Support/Claude/claude_desktop_config.json
+   - Cursor: ~/.cursor/mcp.json
+   - Windsurf: ~/.codeium/windsurf/mcp_config.json
+   - Antigravity / Gemini CLI: ~/.gemini/mcp_config.json
 
 ---
 
-## 🛠️ Tool Suite (31 MCP Tools)
+[ Included Tools (35 Tools) ]
 
-| Tool Category | Available Tools |
-|---------------|-----------------|
-| **Codebase & RAG** | `index_workspace`, `search_codebase`, `get_dependencies` |
-| **Persistent Memory** | `save_interaction`, `search_memories`, `consolidate_memories` |
-| **File Operations** | `read_file`, `write_file`, `patch_file`, `list_files` |
-| **Shell & Version Control** | `run_command` (allowlist protected), `git` |
-| **AI Refactoring & Review** | `explain_code`, `refactor_code`, `review_code`, `check_security`, `optimize_code`, `generate_tests` |
-| **Docs & Framework Specs** | `index_framework_specifications`, `search_framework_specifications`, `generate_documentation`, `get_documentation` |
-| **Plugins & Analytics** | `modularize_code`, `extract_plugin`, `publish_plugin`, `recommend_plugins`, `log_token_usage`, `get_token_analytics` |
-| **System & Health** | `project_health`, `summarize_project`, `configure_settings` |
+CodeMemoryPrime registers tools for your AI to use automatically:
+
+- Code Search & Indexing: index_workspace, search_codebase, get_dependencies
+- Long-Term Memory: save_interaction, search_memories, consolidate_memories
+- File Management: read_file, write_file, patch_file, list_files
+- Git & Safety Checkpoints: run_command, git, create_checkpoint, restore_checkpoint, list_checkpoints
+- Refactoring & Diagnostics: explain_code, refactor_code, review_code, check_security, optimize_code, generate_tests, diagnose_compiler_error
+- Docs & Framework RAG: index_framework_specifications, search_framework_specifications, generate_documentation, get_documentation
+- Modularization & Analytics: modularize_code, extract_plugin, publish_plugin, recommend_plugins, log_token_usage, get_token_analytics
+- Health & System: project_health, summarize_project, configure_settings
 
 ---
 
-## 📜 Business Source License 1.1 (BSL 1.1)
+[ License ]
 
-CodeMemoryPrime is licensed under the **Business Source License 1.1 (BSL 1.1)**.
+CodeMemoryPrime is licensed under the Business Source License 1.1 (BSL 1.1).
 
-- **Free for**: All personal, hobby, educational, open-source development, and commercial entities with **≤ 3 developers** AND **< $100,000 USD in annual revenue**.
-- **Commercial Licensing**: Organizations exceeding the Additional Use Grant require a paid Commercial License.
-- **Change License**: Converts automatically to **Apache 2.0** 3 years after each release.
+- Free to use for: Personal projects, hobbyists, students, open-source work, and small teams (3 or fewer developers, under $100k annual revenue).
+- Commercial License: Required for larger teams or companies exceeding the free tier.
+- Converts to Apache 2.0 (open source) automatically 3 years after release.
 
-For commercial licensing details, visit [https://codememoryprime.com/license](https://codememoryprime.com/license).
+Questions or commercial licenses? Check out https://www.codememoryprime.com/

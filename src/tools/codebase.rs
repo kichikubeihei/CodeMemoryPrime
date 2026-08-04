@@ -177,8 +177,10 @@ pub fn handle_call(name: &str, params: &Value, rt: &Runtime) -> Option<String> {
                     }
                 }
 
+                let checkpoint_msg = crate::tools::shell_git::create_git_checkpoint(&format!("Baseline initial workspace index for '{}'", project), dir);
+
                 info!("Indexed {} files, {} chunks for project '{}'", files_indexed, chunks_indexed, project);
-                let mut result = format!("Indexing complete for project '{}':\n- Files indexed: {}\n- Chunks stored: {}", project, files_indexed, chunks_indexed);
+                let mut result = format!("Indexing complete for project '{}':\n- Files indexed: {}\n- Chunks stored: {}\n- {}", project, files_indexed, chunks_indexed, checkpoint_msg);
                 if !errors.is_empty() {
                     result.push_str(&format!("\n- Errors ({}):\n", errors.len()));
                     for e in errors.iter().take(5) { result.push_str(&format!("  - {}\n", e)); }

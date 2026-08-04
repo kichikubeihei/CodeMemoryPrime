@@ -75,9 +75,20 @@ pub fn handle_call(name: &str, params: &Value, rt: &Runtime) -> Option<String> {
                         let blob = db::vector_to_blob(&emb);
                         let id = uuid::Uuid::new_v4().to_string();
                         let _ = conn.execute(
-                            "INSERT INTO framework_documentation (id, framework_name, category, version, section_title, content, embedding) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                            rusqlite::params![id, fw, category, version, block.title, block.content, blob]
+                            "INSERT INTO framework_documentation (id, category, version, title, url, content, embedding) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                            rusqlite::params![id, category, version, block.title, block.url, block.content, blob]
                         );
+                        let _ = conn.execute(
+                            "INSERT INTO framework_documentation_fts (id, category, version, title, url, content) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                            rusqlite::params![id, category, version, block.title, block.url, block.content]
+                        );
+                        for (link_text, target_url) in &block.links {
+                            let link_id = uuid::Uuid::new_v4().to_string();
+                            let _ = conn.execute(
+                                "INSERT INTO framework_dependencies (id, source_url, target_url, link_text) VALUES (?1, ?2, ?3, ?4)",
+                                rusqlite::params![link_id, block.url, target_url, link_text]
+                            );
+                        }
                     }
                     Some(format!("Indexed {} documentation sections from URL '{}' for framework '{}'.", blocks.len(), source, fw))
                 } else {
@@ -91,9 +102,20 @@ pub fn handle_call(name: &str, params: &Value, rt: &Runtime) -> Option<String> {
                         let blob = db::vector_to_blob(&emb);
                         let id = uuid::Uuid::new_v4().to_string();
                         let _ = conn.execute(
-                            "INSERT INTO framework_documentation (id, framework_name, category, version, section_title, content, embedding) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                            rusqlite::params![id, fw, category, version, block.title, block.content, blob]
+                            "INSERT INTO framework_documentation (id, category, version, title, url, content, embedding) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                            rusqlite::params![id, category, version, block.title, block.url, block.content, blob]
                         );
+                        let _ = conn.execute(
+                            "INSERT INTO framework_documentation_fts (id, category, version, title, url, content) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                            rusqlite::params![id, category, version, block.title, block.url, block.content]
+                        );
+                        for (link_text, target_url) in &block.links {
+                            let link_id = uuid::Uuid::new_v4().to_string();
+                            let _ = conn.execute(
+                                "INSERT INTO framework_dependencies (id, source_url, target_url, link_text) VALUES (?1, ?2, ?3, ?4)",
+                                rusqlite::params![link_id, block.url, target_url, link_text]
+                            );
+                        }
                     }
                     Some(format!("Indexed {} documentation blocks from folder '{}' for framework '{}'.", blocks.len(), source, fw))
                 } else {

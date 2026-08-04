@@ -99,6 +99,17 @@ pub fn init_database(db_path: &str) -> Result<()> {
         [],
     )?;
 
+    // 6.5 Framework dependencies table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS framework_dependencies (
+            id TEXT PRIMARY KEY,
+            source_url TEXT,
+            target_url TEXT,
+            link_text TEXT
+        )",
+        [],
+    )?;
+
     // 7. System settings table
     conn.execute(
         "CREATE TABLE IF NOT EXISTS system_settings (

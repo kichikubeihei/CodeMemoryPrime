@@ -1,76 +1,69 @@
-# CodeMemoryPrime (CMP) Architecture
-
-This document describes the internal design, concurrency model, AST parsing, and hybrid RAG search pipeline of **CodeMemoryPrime (CMP)**.
+# How CodeMemoryPrime Works (Architecture)
 
 ```
-                    ┌─────────────────────────────────────────┐
-                    │            MCP Client                   │
-                    │ (Claude / Cursor / Windsurf / Gemini)   │
-                    └────────────────────┬────────────────────┘
-                                         │ JSON-RPC over stdio
-                                         ▼
-                    ┌─────────────────────────────────────────┐
-                    │      src/protocol/handlers.rs           │
-                    │   (initialize, ping, tools/list, call)   │
-                    └────────────────────┬────────────────────┘
-                                         │
-                                         ▼
-                    ┌─────────────────────────────────────────┐
-                    │       src/tools/ (31 MCP Tools)         │
-                    │  (codebase, memory, file_ops, shell...) │
-                    └───────┬─────────────────────────┬───────┘
-                            │                         │
-                            ▼                         ▼
-            ┌───────────────────────┐       ┌───────────────────────┐
-            │    src/parser.rs      │       │     src/search.rs     │
-            │ (Tree-sitter AST &    │       │ (Reciprocal Rank      │
-            │  Parent-Child RAG)    │       │  Fusion Hybrid RAG)   │
-            └───────────┬───────────┘       └───────────┬───────────┘
-                        │                               │
-                        └───────────────┬───────────────┘
-                                        │
-                                        ▼
-                    ┌─────────────────────────────────────────┐
-                    │         SQLite Database (~/.cmp.db)     │
-                    │  (code_chunks, FTS5, vector BLOBs)      │
-                    └─────────────────────────────────────────┘
++-----------------------------------------------------------------------+
+|  ___ _  _ ___                                                        |
+| / __| || | _ \  CodeMemoryPrime (cmp)                                 |
+| | (__| __ |  _/  Architecture & Internal Design                       |
+| \___|_||_|_|                                                          |
++-----------------------------------------------------------------------+
+```
+
+Here is a simple look at how CodeMemoryPrime handles data under the hood:
+
+```
+[ AI Assistant ]  (Claude / Cursor / Windsurf / Antigravity)
+       |
+       |  JSON-RPC (stdio)
+       v
+[ Protocol Handler ]  (src/protocol/handlers.rs)
+       |
+       v
+[ Tool Registry ]  (src/tools/ -- 32 Tools)
+       |
+       +-------------------+-------------------+
+       |                   |                   |
+       v                   v                   v
+ [ Code Parser ]    [ Search Engine ]    [ Scraper & AST ]
+ (src/parser.rs)    (src/search.rs)      (src/scraper.rs)
+       |                   |                   |
+       +-------------------+-------------------+
+                           |
+                           v
+              [ SQLite Database (~/.cmp.db) ]
+              - Function Chunks
+              - Vector Embeddings
+              - Full-Text Search (FTS5)
 ```
 
 ---
 
-## 1. Core Architectural Pillars
+[ How Code Indexing Works ]
 
-### A. Zero-Dependency Native Rust Binary
-CodeMemoryPrime is built in pure Rust. Unlike Python or Node.js MCP servers that require heavy background daemons, virtual environments, or `npm` installations, CMP compiles to a single, self-contained binary that boots in under 1ms.
+1. Smart Chunking instead of Random Lines
+Most search engines chop code into arbitrary 50-line blocks, which cuts functions right down the middle and loses context. CMP parses the code structure (functions, methods, classes) so it knows where code blocks actually start and stop.
 
-### B. AST Parent-Child Context Inheritance (`src/parser.rs`)
-Traditional code RAG chunks files naively by line count, losing critical function signatures, top-level imports, and parent struct/class context.
-CMP uses Tree-sitter AST parsing to extract function and method blocks while attaching:
-1. Top-level file import headers.
-2. Parent class/struct definitions and trait impl blocks.
-3. Enclosing namespace context.
+2. Keeping the Surrounding Context
+When a function is indexed, CMP attaches top-level file imports and parent struct/class names to that chunk. So when the AI looks at a 10-line function, it still knows what libraries were imported and what class it belongs to.
 
-### C. Sub-Chunk SHA-256 Incremental Hashing
-During `index_workspace`, CMP computes a SHA-256 hash for every parsed function chunk:
-- If a function's code has not changed since the last index run, CMP reuses the existing vector embedding from SQLite.
-- Re-indexing modified projects completes in **under 0.200 seconds** (a 95%+ performance boost).
+3. Fast Re-indexing (SHA-256 Hashing)
+Every function chunk gets a SHA-256 hash when saved. When you run a re-index, CMP compares the hash of each function. If a function hasn't changed, it reuses the existing vector embedding from SQLite. That's why re-indexing a project takes less than 0.2 seconds.
 
-### D. Hybrid RRF Search Engine (`src/search.rs`)
-CMP uses **Reciprocal Rank Fusion (RRF)** to combine:
-1. Semantic Cosine Similarity via local vector embeddings.
-2. Exact keyword matching via SQLite FTS5 (Full-Text Search).
-3. Dependency graph cross-referencing (`code_dependencies` table).
+4. Hybrid Search (Vectors + Keywords)
+When your AI asks a question, CMP runs two searches in parallel:
+- Semantic Search: Uses vector math to find code with matching meanings.
+- Keyword Search: Uses SQLite FTS5 to find exact variable or function names.
+
+It then merges the two lists together so you get both exact code matches and conceptual matches.
 
 ---
 
-## 2. Component Breakdown
+[ Code Structure ]
 
-| Module | Location | Description |
-|--------|----------|-------------|
-| **Protocol** | `src/protocol/` | Handles MCP JSON-RPC 2.0 stdio stream, notifications, and tool dispatching. |
-| **Tools Registry** | `src/tools/` | 31 modularized MCP tool implementations split across 8 domain files. |
-| **Parser** | `src/parser.rs` | Tree-sitter AST parsing, import extraction, parent-child context. |
-| **Search Engine** | `src/search.rs` | RRF hybrid vector + FTS5 retrieval engine. |
-| **LLM Client** | `src/llm.rs` | Provider-agnostic client supporting Ollama and OpenAI-compatible APIs (LM Studio, vLLM). |
-| **Licensing** | `src/license.rs` | Offline Ed25519 signature verification for BSL 1.1 commercial seat keys. |
-| **Database** | `src/db.rs` | SQLite embedded database schema and FTS5 virtual table migrations. |
+- src/protocol/: Handles incoming and outgoing JSON-RPC messages over stdio.
+- src/tools/: Contains the definitions and handlers for all 32 tools.
+- src/parser.rs: Chunks code, tracks brace depth, and extracts imports.
+- src/scraper.rs: Parses Markdown AST and HTML DOM for framework documentation.
+- src/search.rs: Runs the hybrid vector and full-text search algorithms.
+- src/llm.rs: Communicates with local Ollama or OpenAI-compatible endpoints.
+- src/db.rs: Manages the local SQLite database (`~/.codememory_prime.db`).

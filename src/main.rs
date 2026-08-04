@@ -1,29 +1,8 @@
-mod db;
-mod llm;
-mod parser;
-mod search;
-mod scraper;
-mod watcher;
-mod license;
-mod protocol;
-mod tools;
-
 use std::io::{self, BufRead, Write};
 use serde_json::{json, Value};
 use tokio::runtime::Runtime;
 use tracing::info;
-use protocol::handlers::{RpcRequest, handle_request};
-
-pub fn get_db_path() -> String {
-    let base = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let new_path = format!("{}/.codememory_prime.db", base);
-    let old_path = format!("{}/.coder_memory.db", base);
-    if !std::path::Path::new(&new_path).exists() && std::path::Path::new(&old_path).exists() {
-        old_path
-    } else {
-        new_path
-    }
-}
+use codememory_prime::protocol::handlers::{RpcRequest, handle_request};
 
 fn main() {
     tracing_subscriber::fmt()

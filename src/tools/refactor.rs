@@ -2,6 +2,41 @@ use serde_json::{json, Value};
 use tokio::runtime::Runtime;
 use crate::llm;
 
+async fn get_framework_context(code: &str) -> String {
+    let config = crate::llm::get_config_from_db_or_env();
+    if !config.use_framework_grounding {
+        return String::new();
+    }
+    
+    let emb = match crate::llm::generate_embedding(code).await {
+        Ok(e) => e,
+        Err(_) => return String::new(),
+    };
+    
+    let db_path = crate::get_db_path();
+    let conn = match rusqlite::Connection::open(&db_path) {
+        Ok(c) => c,
+        Err(_) => return String::new(),
+    };
+    
+    let chunks = match crate::search::query_hybrid_documentation(&conn, code, &emb, "all", config.framework_grounding_chunks) {
+        Ok(c) => c,
+        Err(_) => return String::new(),
+    };
+    
+    if chunks.is_empty() {
+        return String::new();
+    }
+    
+    let mut out = String::from("<framework_specs>\n");
+    for chunk in chunks {
+        out.push_str(&format!("Citation: [{}]({})\n{}\n\n", chunk.title, chunk.url, chunk.content));
+    }
+    out.push_str("</framework_specs>\n\n");
+    out
+}
+
+
 pub fn list_schemas() -> Vec<Value> {
     vec![
         json!({
@@ -88,7 +123,9 @@ pub fn handle_call(name: &str, params: &Value, rt: &Runtime) -> Option<String> {
         }
         "refactor_code" => {
             let goal = params.get("goal").and_then(|s| s.as_str()).unwrap_or("clean");
-            let prompt = format!("Refactor this code to achieve goal: '{}'. Return modified code and explanation:\n\n```\n{}\n```", goal, code);
+            let context = rt.block_on(async { get_framework_context(code).await });
+            let instruction = if context.is_empty() { "" } else { "If you utilize any information from the provided <framework_specs>, you MUST include inline code comments citing the Title and URL for auditing purposes." };
+            let prompt = format!("{}Refactor this code to achieve goal: '{}'. Return modified code and explanation:\n\n```\n{}\n```\n{}", context, goal, code, instruction);
             let resp = rt.block_on(async { llm::query_ollama(&prompt).await.unwrap_or_default() });
             Some(resp)
         }
@@ -109,10 +146,25 @@ pub fn handle_call(name: &str, params: &Value, rt: &Runtime) -> Option<String> {
         }
         "generate_tests" => {
             let fw = params.get("framework").and_then(|s| s.as_str()).unwrap_or("standard unit test");
-            let prompt = format!("Generate comprehensive unit tests using framework '{}' for:\n\n```\n{}\n```", fw, code);
+            let context = rt.block_on(async { get_framework_context(code).await });
+            let instruction = if context.is_empty() { "" } else { "If you utilize any information from the provided <framework_specs>, you MUST include inline code comments citing the Title and URL for auditing purposes." };
+            let prompt = format!("{}Generate comprehensive unit tests using framework '{}' for:\n\n```\n{}\n```\n{}", context, fw, code, instruction);
             let resp = rt.block_on(async { llm::query_ollama(&prompt).await.unwrap_or_default() });
             Some(resp)
         }
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_list_schemas() {
+        let schemas = list_schemas();
+        assert!(!schemas.is_empty());
+        assert!(schemas.iter().any(|s| s["name"] == "refactor_code"));
+        assert!(schemas.iter().any(|s| s["name"] == "generate_tests"));
     }
 }

@@ -11,6 +11,8 @@ pub struct LlmConfig {
     pub gen_model: String,   // e.g. "qwen2.5-coder:7b" or "gpt-4o-mini"
     pub embed_model: String, // e.g. "nomic-embed-text" or "text-embedding-3-small"
     pub api_key: String,     // optional API key
+    pub use_framework_grounding: bool,
+    pub framework_grounding_chunks: usize,
 }
 
 impl Default for LlmConfig {
@@ -21,6 +23,8 @@ impl Default for LlmConfig {
             gen_model: "qwen2.5-coder:7b".to_string(),
             embed_model: "nomic-embed-text".to_string(),
             api_key: "".to_string(),
+            use_framework_grounding: true,
+            framework_grounding_chunks: 3,
         }
     }
 }
@@ -45,6 +49,14 @@ pub fn get_config_from_db_or_env() -> LlmConfig {
         if let Some(g) = get_setting("llm_gen_model") { config.gen_model = g; }
         if let Some(e) = get_setting("llm_embed_model") { config.embed_model = e; }
         if let Some(k) = get_setting("llm_api_key") { config.api_key = k; }
+        if let Some(v) = get_setting("use_framework_grounding") {
+            if let Ok(parsed) = v.parse::<bool>() { config.use_framework_grounding = parsed; }
+        }
+        if let Some(v) = get_setting("framework_grounding_chunks") {
+            if let Ok(parsed) = v.parse::<usize>() { 
+                config.framework_grounding_chunks = std::cmp::min(parsed, 10);
+            }
+        }
     }
 
     // Environment variable overrides
@@ -62,12 +74,14 @@ pub fn save_config_to_db(config: &LlmConfig) -> Result<()> {
     let _ = crate::db::init_database(&db_path);
     let conn = rusqlite::Connection::open(&db_path)?;
 
-    let settings = [
-        ("llm_provider", &config.provider),
-        ("llm_base_url", &config.base_url),
-        ("llm_gen_model", &config.gen_model),
-        ("llm_embed_model", &config.embed_model),
-        ("llm_api_key", &config.api_key),
+    let settings = vec![
+        ("llm_provider", config.provider.clone()),
+        ("llm_base_url", config.base_url.clone()),
+        ("llm_gen_model", config.gen_model.clone()),
+        ("llm_embed_model", config.embed_model.clone()),
+        ("llm_api_key", config.api_key.clone()),
+        ("use_framework_grounding", config.use_framework_grounding.to_string()),
+        ("framework_grounding_chunks", config.framework_grounding_chunks.to_string()),
     ];
 
     for (k, v) in settings {
