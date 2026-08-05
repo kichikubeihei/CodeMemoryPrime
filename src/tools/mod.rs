@@ -7,6 +7,7 @@ pub mod docs;
 pub mod plugins;
 pub mod system;
 pub mod prompt_audit;
+pub mod custom_docs;
 
 use serde_json::Value;
 use tokio::runtime::Runtime;
@@ -22,6 +23,7 @@ pub fn list_all_tools() -> Vec<Value> {
     tools.extend(plugins::list_schemas());
     tools.extend(system::list_schemas());
     tools.extend(prompt_audit::list_schemas());
+    tools.extend(custom_docs::list_schemas());
     tools
 }
 
@@ -51,6 +53,9 @@ pub fn dispatch_tool_call(name: &str, params: &Value, rt: &Runtime) -> Option<St
         return Some(res);
     }
     if let Some(res) = prompt_audit::handle_call(name, params, rt) {
+        return Some(res);
+    }
+    if let Some(res) = custom_docs::handle_call(name, params, rt) {
         return Some(res);
     }
     None
