@@ -318,6 +318,41 @@ fn extract_text_fallback_chunks(file_name: &str, content: &str, size_lines: usiz
     chunks
 }
 
+pub fn detect_llm_chunk_type(name: &str, content: &str, file_path: &str) -> Option<String> {
+    let content_lower = content.to_lowercase();
+    let name_lower = name.to_lowercase();
+    let path_lower = file_path.to_lowercase();
+
+    // Check for LLM API calls
+    if content_lower.contains("chat.completions.create")
+        || content_lower.contains("messages.create")
+        || content_lower.contains("generativeai")
+        || content_lower.contains("query_llm")
+        || content_lower.contains("query_ollama")
+        || content_lower.contains("createchatcompletion")
+        || content_lower.contains("generatecontent")
+        || content_lower.contains("langchain")
+    {
+        return Some("llm_call".to_string());
+    }
+
+    // Check for LLM Prompts & System Instructions
+    if path_lower.ends_with(".prompt")
+        || path_lower.contains("prompts/")
+        || name_lower.contains("prompt")
+        || content_lower.contains("system_prompt")
+        || content_lower.contains("system_message")
+        || content_lower.contains("you are an ai")
+        || content_lower.contains("you are an expert")
+        || content_lower.contains("<system_prompt>")
+        || (content_lower.contains("role") && content_lower.contains("system") && content_lower.contains("content"))
+    {
+        return Some("llm_prompt".to_string());
+    }
+
+    None
+}
+
 pub fn parse_file_chunks(file_path: &str, content: &str) -> Vec<Chunk> {
     let file_name = Path::new(file_path)
         .file_name()
@@ -361,6 +396,9 @@ pub fn parse_file_chunks(file_path: &str, content: &str) -> Vec<Chunk> {
     
     for chunk in &mut chunks {
         chunk.parent_context = imports_str.clone();
+        if let Some(llm_type) = detect_llm_chunk_type(&chunk.name, &chunk.code_content, file_path) {
+            chunk.chunk_type = llm_type;
+        }
     }
     
     chunks
