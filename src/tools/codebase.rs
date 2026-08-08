@@ -48,11 +48,13 @@ pub fn list_schemas() -> Vec<Value> {
 pub fn handle_call(name: &str, params: &Value, rt: &Runtime) -> Option<String> {
     match name {
         "index_workspace" => {
-            let dir = params.get("directory_path").and_then(|s| s.as_str()).unwrap_or("");
+            let raw_dir = params.get("directory_path").and_then(|s| s.as_str()).unwrap_or("");
+            let normalized_dir_str = crate::path_utils::normalize_path(raw_dir);
+            let dir = normalized_dir_str.as_str();
             let project = params.get("project_name").and_then(|s| s.as_str()).unwrap_or("");
 
             if !std::path::Path::new(dir).exists() {
-                Some(format!("Directory '{}' does not exist.", dir))
+                Some(format!("Directory '{}' does not exist.", raw_dir))
             } else {
                 let db_path = get_db_path();
                 let _ = db::init_database(&db_path);

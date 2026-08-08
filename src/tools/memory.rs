@@ -85,26 +85,28 @@ pub fn handle_call(name: &str, params: &Value, rt: &Runtime) -> Option<String> {
 
                 let mut out = format!("=== Memory Search Results for '{}' ===\n\n", query);
                 if facts.is_empty() {
-                    let mut stmt = conn.prepare("SELECT user_request, ai_response, entry_date FROM journal_entries WHERE project_name = ?1 OR ?1 = 'all' ORDER BY entry_date DESC LIMIT ?2").unwrap();
-                    let mut rows = stmt.query(rusqlite::params![project, limit as i64]).unwrap();
-                    let mut journal_count = 0;
+                    if let Ok(mut stmt) = conn.prepare("SELECT user_request, ai_response, entry_date FROM journal_entries WHERE project_name = ?1 OR ?1 = 'all' ORDER BY entry_date DESC LIMIT ?2") {
+                        if let Ok(mut rows) = stmt.query(rusqlite::params![project, limit as i64]) {
+                            let mut journal_count = 0;
 
-                    while let Ok(Some(row)) = rows.next() {
-                        if journal_count == 0 {
-                            out.push_str("No consolidated facts found. Checking raw journal history...\n\n");
+                            while let Ok(Some(row)) = rows.next() {
+                                if journal_count == 0 {
+                                    out.push_str("No consolidated facts found. Checking raw journal history...\n\n");
+                                }
+                                journal_count += 1;
+                                let u: String = row.get(0).unwrap_or_default();
+                                let a: String = row.get(1).unwrap_or_default();
+                                let d: String = row.get(2).unwrap_or_default();
+                                out.push_str(&format!("- **[{}]**\n  *User:* {}\n  *Summary:* {}\n\n", d, u, a));
+                            }
+
+                            if journal_count == 0 {
+                                out.push_str(&format!(
+                                    "[Notice] No memory facts or journal entries found for project '{}'.\n\nTo save architectural decisions or user preferences into persistent memory:\nCall tool `save_interaction(user_request='...', ai_response='...', project_name='{}')`.",
+                                    project, project
+                                ));
+                            }
                         }
-                        journal_count += 1;
-                        let u: String = row.get(0).unwrap_or_default();
-                        let a: String = row.get(1).unwrap_or_default();
-                        let d: String = row.get(2).unwrap_or_default();
-                        out.push_str(&format!("- **[{}]**\n  *User:* {}\n  *Summary:* {}\n\n", d, u, a));
-                    }
-
-                    if journal_count == 0 {
-                        out.push_str(&format!(
-                            "[Notice] No memory facts or journal entries found for project '{}'.\n\nTo save architectural decisions or user preferences into persistent memory:\nCall tool `save_interaction(user_request='...', ai_response='...', project_name='{}')`.",
-                            project, project
-                        ));
                     }
                 } else {
                     for f in facts {
@@ -121,15 +123,16 @@ pub fn handle_call(name: &str, params: &Value, rt: &Runtime) -> Option<String> {
             let db_path = get_db_path();
 
             if let Ok(conn) = rusqlite::Connection::open(&db_path) {
-                let mut stmt = conn.prepare("SELECT id, user_request, ai_response FROM journal_entries WHERE project_name = ?1 AND consolidated = 0 LIMIT 20").unwrap();
-                let mut rows = stmt.query(rusqlite::params![project]).unwrap();
                 let mut entries = Vec::new();
-
-                while let Ok(Some(row)) = rows.next() {
-                    let id: String = row.get(0).unwrap();
-                    let req: String = row.get(1).unwrap();
-                    let resp: String = row.get(2).unwrap();
-                    entries.push((id, req, resp));
+                if let Ok(mut stmt) = conn.prepare("SELECT id, user_request, ai_response FROM journal_entries WHERE project_name = ?1 AND consolidated = 0 LIMIT 20") {
+                    if let Ok(mut rows) = stmt.query(rusqlite::params![project]) {
+                        while let Ok(Some(row)) = rows.next() {
+                            let id: String = row.get(0).unwrap_or_default();
+                            let req: String = row.get(1).unwrap_or_default();
+                            let resp: String = row.get(2).unwrap_or_default();
+                            entries.push((id, req, resp));
+                        }
+                    }
                 }
 
                 if entries.is_empty() {

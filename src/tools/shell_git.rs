@@ -157,6 +157,11 @@ pub fn create_git_checkpoint(desc: &str, cwd: &str) -> String {
         Ok(out) => {
             let stdout = String::from_utf8_lossy(&out.stdout).to_string();
             let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+
+            if stderr.contains("not a git repository") || stdout.contains("not a git repository") || !out.status.success() && stderr.contains("fatal") {
+                return "[Git Notice] No Git repository detected in this workspace. Version restore points are disabled until initialized. (Tip: Ask the AI assistant to help initialize a Git/GitHub repository for project safety and checkpoint tracking).".to_string();
+            }
+
             if stdout.contains("No local changes to save") {
                 return format!("[Checkpoint Saved] Workspace is clean. Bookmark created for '{}' at {}.", desc, timestamp);
             }
@@ -164,7 +169,7 @@ pub fn create_git_checkpoint(desc: &str, cwd: &str) -> String {
             let _ = Command::new("git").args(["stash", "apply"]).current_dir(cwd).output();
             format!("[Checkpoint Saved] Created Git restore point for '{}' at {}.\nDetails: {}", desc, timestamp, if stdout.trim().is_empty() { stderr } else { stdout })
         }
-        Err(e) => format!("Failed to create git checkpoint: {}", e),
+        Err(_) => "[Git Notice] Git is not installed or available on PATH. Version restore points are disabled.".to_string(),
     }
 }
 

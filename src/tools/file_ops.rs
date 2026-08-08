@@ -58,7 +58,9 @@ pub fn list_schemas() -> Vec<Value> {
 pub fn handle_call(name: &str, params: &Value) -> Option<String> {
     match name {
         "read_file" => {
-            let path_str = params.get("path").and_then(|s| s.as_str()).unwrap_or("");
+            let raw_path = params.get("path").and_then(|s| s.as_str()).unwrap_or("");
+            let norm_path_str = crate::path_utils::normalize_path(raw_path);
+            let path_str = norm_path_str.as_str();
             let start = params.get("start_line").and_then(|s| s.as_u64()).map(|n| n as usize);
             let end = params.get("end_line").and_then(|s| s.as_u64()).map(|n| n as usize);
 
@@ -69,21 +71,23 @@ pub fn handle_call(name: &str, params: &Value) -> Option<String> {
                     let e_idx = end.unwrap_or(lines.len()).min(lines.len());
 
                     if s_idx >= lines.len() {
-                        Some(format!("[Read Notice] Requested start_line {} exceeds total line count of file '{}' ({} total lines).", start.unwrap_or(1), path_str, lines.len()))
+                        Some(format!("[Read Notice] Requested start_line {} exceeds total line count of file '{}' ({} total lines).", start.unwrap_or(1), raw_path, lines.len()))
                     } else {
                         let selected = &lines[s_idx..e_idx];
-                        let mut out = format!("=== File: {} (Lines {}-{}) ===\n", path_str, s_idx + 1, e_idx);
+                        let mut out = format!("=== File: {} (Lines {}-{}) ===\n", raw_path, s_idx + 1, e_idx);
                         for (idx, line) in selected.iter().enumerate() {
                             out.push_str(&format!("{:4} | {}\n", s_idx + idx + 1, line));
                         }
                         Some(out)
                     }
                 }
-                Err(err) => Some(format!("Failed to read file '{}': {}", path_str, err)),
+                Err(err) => Some(format!("Failed to read file '{}': {}", raw_path, err)),
             }
         }
         "write_file" => {
-            let path_str = params.get("path").and_then(|s| s.as_str()).unwrap_or("");
+            let raw_path = params.get("path").and_then(|s| s.as_str()).unwrap_or("");
+            let norm_path_str = crate::path_utils::normalize_path(raw_path);
+            let path_str = norm_path_str.as_str();
             let content = params.get("content").and_then(|s| s.as_str()).unwrap_or("");
 
             if let Some(parent) = std::path::Path::new(path_str).parent() {
@@ -91,40 +95,46 @@ pub fn handle_call(name: &str, params: &Value) -> Option<String> {
             }
 
             match std::fs::write(path_str, content) {
-                Ok(_) => Some(format!("Successfully wrote {} bytes to '{}'.", content.len(), path_str)),
-                Err(err) => Some(format!("Failed to write file '{}': {}", path_str, err)),
+                Ok(_) => Some(format!("Successfully wrote {} bytes to '{}'.", content.len(), raw_path)),
+                Err(err) => Some(format!("Failed to write file '{}': {}", raw_path, err)),
             }
         }
         "patch_file" => {
-            let path_str = params.get("path").and_then(|s| s.as_str()).unwrap_or("");
+            let raw_path = params.get("path").and_then(|s| s.as_str()).unwrap_or("");
+            let norm_path_str = crate::path_utils::normalize_path(raw_path);
+            let path_str = norm_path_str.as_str();
             let target = params.get("target_content").and_then(|s| s.as_str()).unwrap_or("");
             let replacement = params.get("replacement_content").and_then(|s| s.as_str()).unwrap_or("");
 
             match std::fs::read_to_string(path_str) {
                 Ok(content) => {
                     if !content.contains(target) {
-                        Some(format!(
-                            "[Patch Error] Exact target content snippet not found in '{}'.\n\nTo fix:\n1. Call `read_file(path='{}')` to inspect current line contents and indentation.\n2. Ensure target_content matches exact characters, including whitespace.",
-                            path_str, path_str
-                        ))
+                        Some(format!("Target content snippet not found in '{}'. Patch aborted.", raw_path))
                     } else {
-                        let new_content = content.replacen(target, replacement, 1);
-                        match std::fs::write(path_str, &new_content) {
-                            Ok(_) => Some(format!("Successfully patched '{}'.", path_str)),
-                            Err(err) => Some(format!("Failed to write patched content to '{}': {}", path_str, err)),
+                        let occurrences = content.matches(target).count();
+                        if occurrences > 1 {
+                            Some(format!("Target content matches multiple ({}) places in '{}'. Provide a more specific snippet context.", occurrences, raw_path))
+                        } else {
+                            let new_content = content.replace(target, replacement);
+                            match std::fs::write(path_str, new_content) {
+                                Ok(_) => Some(format!("Successfully patched file '{}'.", raw_path)),
+                                Err(err) => Some(format!("Failed to write patched file '{}': {}", raw_path, err)),
+                            }
                         }
                     }
                 }
-                Err(err) => Some(format!("Failed to read file '{}': {}", path_str, err)),
+                Err(err) => Some(format!("Failed to read file '{}' for patching: {}", raw_path, err)),
             }
         }
         "list_files" => {
-            let dir_str = params.get("directory_path").and_then(|s| s.as_str()).unwrap_or("");
-            let recursive = params.get("recursive").and_then(|b| b.as_bool()).unwrap_or(false);
+            let raw_dir = params.get("directory_path").and_then(|s| s.as_str()).unwrap_or("");
+            let norm_dir_str = crate::path_utils::normalize_path(raw_dir);
+            let dir = norm_dir_str.as_str();
+            let recursive = params.get("recursive").and_then(|v| v.as_bool()).unwrap_or(false);
 
-            let path = std::path::Path::new(dir_str);
+            let path = std::path::Path::new(dir);
             if !path.exists() {
-                Some(format!("Directory '{}' does not exist.", dir_str))
+                Some(format!("Directory '{}' does not exist.", raw_dir))
             } else {
                 let mut files = Vec::new();
                 if recursive {
@@ -147,7 +157,7 @@ pub fn handle_call(name: &str, params: &Value) -> Option<String> {
                     }
                 }
 
-                Some(format!("Directory contents of '{}' ({} items):\n- {}", dir_str, files.len(), files.join("\n- ")))
+                Some(format!("Directory contents of '{}' ({} items):\n- {}", raw_dir, files.len(), files.join("\n- ")))
             }
         }
         _ => None,

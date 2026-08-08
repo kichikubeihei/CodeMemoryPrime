@@ -7,6 +7,7 @@ pub mod watcher;
 pub mod license;
 pub mod protocol;
 pub mod tools;
+pub mod path_utils;
 
 pub fn get_db_path() -> String {
     let base = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());

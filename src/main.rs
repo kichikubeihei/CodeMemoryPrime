@@ -12,7 +12,14 @@ fn main() {
         
     info!("Starting CodeMemoryPrime (CMP) server");
 
-    let rt = Runtime::new().unwrap();
+    let rt = match Runtime::new() {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("[CMP Error] Failed to initialize async runtime: {}", e);
+            return;
+        }
+    };
+
     let stdin = io::stdin();
     let mut stdout = io::stdout();
     let reader = stdin.lock();
@@ -27,7 +34,7 @@ fn main() {
                     continue;
                 }
 
-                let id = req.id.clone().unwrap();
+                let id = req.id.clone().unwrap_or(Value::Null);
                 let result = handle_request(req, &rt);
                 
                 let is_error = result.get("error").is_some();
@@ -46,9 +53,10 @@ fn main() {
                     })
                 };
 
-                let out = serde_json::to_string(&res).unwrap();
-                writeln!(stdout, "{}", out).unwrap();
-                stdout.flush().unwrap();
+                if let Ok(out) = serde_json::to_string(&res) {
+                    let _ = writeln!(stdout, "{}", out);
+                    let _ = stdout.flush();
+                }
             }
         }
     }
