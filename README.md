@@ -75,7 +75,7 @@ CodeMemoryPrime registers tools for your AI to use automatically:
 - Long-Term Memory: save_interaction, search_memories, consolidate_memories
 - File Management: read_file, write_file, patch_file, list_files
 - Git & Safety Checkpoints: run_command, git, create_checkpoint, restore_checkpoint, list_checkpoints
-- Refactoring & Diagnostics: explain_code, refactor_code, review_code, check_security, optimize_code, generate_tests, diagnose_compiler_error
+- Refactoring & Diagnostics: explain_code, refactor_code, review_code, audit_code_hygiene, optimize_code, generate_tests, diagnose_compiler_error
 - Docs & Framework RAG: index_framework_specifications, search_framework_specifications, generate_documentation, get_documentation
 - Modularization & Analytics: modularize_code, extract_plugin, publish_plugin, recommend_plugins, log_token_usage, get_token_analytics
 - Health & System: project_health, summarize_project, configure_settings

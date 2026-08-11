@@ -75,8 +75,8 @@ pub fn list_schemas() -> Vec<Value> {
             }
         }),
         json!({
-            "name": "check_security",
-            "description": "Scans code snippets for OWASP vulnerabilities and security flaws.",
+            "name": "audit_code_hygiene",
+            "description": "Audits code snippets for defensive coding standards, input sanitization, hardcoded credentials, and hygiene rules.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -130,12 +130,12 @@ pub fn handle_call(name: &str, params: &Value, rt: &Runtime) -> Option<String> {
             Some(resp)
         }
         "review_code" => {
-            let prompt = format!("Perform a detailed code review covering readability, performance, security, and edge cases:\n\n```\n{}\n```", code);
+            let prompt = format!("Perform a detailed code review covering readability, performance, input handling, and edge cases:\n\n```\n{}\n```", code);
             let resp = rt.block_on(async { llm::query_ollama(&prompt).await.unwrap_or_default() });
             Some(resp)
         }
-        "check_security" => {
-            let prompt = format!("Scan this code for security vulnerabilities, injection risks, unsafe memory access, or credentials:\n\n```\n{}\n```", code);
+        "audit_code_hygiene" | "check_security" => {
+            let prompt = format!("Audit this code snippet for defensive coding hygiene, hardcoded credentials, input sanitization, and reliability standards:\n\n```\n{}\n```", code);
             let resp = rt.block_on(async { llm::query_ollama(&prompt).await.unwrap_or_default() });
             Some(resp)
         }
