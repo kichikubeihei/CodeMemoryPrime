@@ -6,13 +6,15 @@ use tracing::info;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlmConfig {
-    pub provider: String,        // "ollama" or "openai"
-    pub base_url: String,        // e.g. "http://127.0.0.1:11434"
-    pub remote_base_url: String, // e.g. "http://100.102.233.128:11434" (Tailscale Desktop Remote)
-    pub gen_model: String,       // e.g. "qwen2.5-coder:7b"
-    pub remote_gen_model: String,// e.g. "muse-glimmer:30b"
-    pub embed_model: String,     // e.g. "nomic-embed-text"
-    pub api_key: String,         // optional API key
+    pub provider: String,           // "ollama" or "openai"
+    pub pipeline_mode: String,      // "auto", "full_remote", "hybrid_remote_orch", "full_local"
+    pub base_url: String,           // Local base URL (e.g. "http://127.0.0.1:11434")
+    pub remote_base_url: String,    // Remote Tailscale URL (e.g. "http://100.102.233.128:11434")
+    pub gen_model: String,          // Local Coder model (e.g. "qwen2.5-coder:14b")
+    pub remote_orch_model: String, // Remote Orchestrator model (e.g. "muse-glimmer:30b")
+    pub remote_gen_model: String,  // Remote Coder model (e.g. "qwen2.5-coder:14b")
+    pub embed_model: String,        // Embedding model (e.g. "nomic-embed-text")
+    pub api_key: String,            // optional API key
     pub use_framework_grounding: bool,
     pub framework_grounding_chunks: usize,
 }
@@ -21,10 +23,12 @@ impl Default for LlmConfig {
     fn default() -> Self {
         Self {
             provider: "ollama".to_string(),
+            pipeline_mode: "auto".to_string(),
             base_url: "http://127.0.0.1:11434".to_string(),
             remote_base_url: "".to_string(),
-            gen_model: "qwen2.5-coder:7b".to_string(),
-            remote_gen_model: "muse-glimmer:30b".to_string(),
+            gen_model: "qwen2.5-coder:14b".to_string(),
+            remote_orch_model: "muse-glimmer:30b".to_string(),
+            remote_gen_model: "qwen2.5-coder:14b".to_string(),
             embed_model: "nomic-embed-text".to_string(),
             api_key: "".to_string(),
             use_framework_grounding: true,
@@ -49,9 +53,11 @@ pub fn get_config_from_db_or_env() -> LlmConfig {
         };
 
         if let Some(p) = get_setting("llm_provider") { config.provider = p; }
+        if let Some(pm) = get_setting("pipeline_mode") { config.pipeline_mode = pm; }
         if let Some(b) = get_setting("llm_base_url") { config.base_url = b; }
         if let Some(rb) = get_setting("llm_remote_base_url") { config.remote_base_url = rb; }
         if let Some(g) = get_setting("llm_gen_model") { config.gen_model = g; }
+        if let Some(ro) = get_setting("llm_remote_orch_model") { config.remote_orch_model = ro; }
         if let Some(rg) = get_setting("llm_remote_gen_model") { config.remote_gen_model = rg; }
         if let Some(e) = get_setting("llm_embed_model") { config.embed_model = e; }
         if let Some(k) = get_setting("llm_api_key") { config.api_key = k; }
@@ -67,9 +73,11 @@ pub fn get_config_from_db_or_env() -> LlmConfig {
 
     // Environment variable overrides
     if let Ok(p) = std::env::var("MCP_LLM_PROVIDER") { config.provider = p; }
+    if let Ok(pm) = std::env::var("MCP_PIPELINE_MODE") { config.pipeline_mode = pm; }
     if let Ok(b) = std::env::var("MCP_LLM_BASE_URL") { config.base_url = b; }
     if let Ok(rb) = std::env::var("MCP_LLM_REMOTE_BASE_URL") { config.remote_base_url = rb; }
     if let Ok(g) = std::env::var("MCP_LLM_GEN_MODEL") { config.gen_model = g; }
+    if let Ok(ro) = std::env::var("MCP_LLM_REMOTE_ORCH_MODEL") { config.remote_orch_model = ro; }
     if let Ok(rg) = std::env::var("MCP_LLM_REMOTE_GEN_MODEL") { config.remote_gen_model = rg; }
     if let Ok(e) = std::env::var("MCP_LLM_EMBED_MODEL") { config.embed_model = e; }
     if let Ok(k) = std::env::var("MCP_LLM_API_KEY") { config.api_key = k; }
@@ -84,9 +92,11 @@ pub fn save_config_to_db(config: &LlmConfig) -> Result<()> {
 
     let settings = vec![
         ("llm_provider", config.provider.clone()),
+        ("pipeline_mode", config.pipeline_mode.clone()),
         ("llm_base_url", config.base_url.clone()),
         ("llm_remote_base_url", config.remote_base_url.clone()),
         ("llm_gen_model", config.gen_model.clone()),
+        ("llm_remote_orch_model", config.remote_orch_model.clone()),
         ("llm_remote_gen_model", config.remote_gen_model.clone()),
         ("llm_embed_model", config.embed_model.clone()),
         ("llm_api_key", config.api_key.clone()),
@@ -114,13 +124,24 @@ pub async fn query_ollama(prompt: &str) -> Result<String> {
     query_llm(prompt).await
 }
 
-pub async fn query_llm_with_config(prompt: &str, config: &LlmConfig) -> Result<String> {
-    // 1. If remote_base_url is configured (e.g. Tailscale Desktop http://100.102.233.128:11434), attempt Remote-First!
-    if !config.remote_base_url.trim().is_empty() {
-        let remote_url = config.remote_base_url.trim_end_matches('/');
-        let model = if !config.remote_gen_model.is_empty() { &config.remote_gen_model } else { &config.gen_model };
+pub async fn query_orchestrator(prompt: &str) -> Result<String> {
+    let config = get_config_from_db_or_env();
+    query_orchestrator_with_config(prompt, &config).await
+}
 
-        info!("🌐 [Remote-First] Querying Remote Host ({}) with model '{}'...", remote_url, model);
+pub async fn query_coder(prompt: &str) -> Result<String> {
+    let config = get_config_from_db_or_env();
+    query_coder_with_config(prompt, &config).await
+}
+
+pub async fn query_orchestrator_with_config(prompt: &str, config: &LlmConfig) -> Result<String> {
+    let mode = config.pipeline_mode.to_lowercase();
+    
+    if (mode == "auto" || mode == "full_remote" || mode == "hybrid_remote_orch") && !config.remote_base_url.trim().is_empty() {
+        let remote_url = config.remote_base_url.trim_end_matches('/');
+        let model = if !config.remote_orch_model.is_empty() { &config.remote_orch_model } else { &config.gen_model };
+
+        info!("🌐 [Orchestrator Remote-First] Querying Remote Orchestrator ({}) with model '{}'...", remote_url, model);
 
         let remote_client = Client::builder()
             .timeout(std::time::Duration::from_secs(120))
@@ -129,22 +150,60 @@ pub async fn query_llm_with_config(prompt: &str, config: &LlmConfig) -> Result<S
 
         match query_single_endpoint(&remote_client, remote_url, model, &config.provider, &config.api_key, prompt).await {
             Ok(res) => {
-                info!("✅ [Remote-First Success] Received response from Remote Host ({})", remote_url);
+                info!("✅ [Orchestrator Success] Received response from Remote Orchestrator ({})", remote_url);
                 return Ok(res);
             }
             Err(err) => {
-                info!("⚠️ [Remote Failover] Remote Host ({}) unreachable or failed ({}). Failing over to Local Host ({})...", remote_url, err, config.base_url);
+                info!("⚠️ [Orchestrator Failover] Remote Orchestrator ({}) unreachable ({}). Failing over to Local Coder ({})...", remote_url, err, config.base_url);
             }
         }
     }
 
-    // 2. Local Host Execution (Fallback or primary if no remote configured)
+    // Local Host Execution
     let local_client = Client::builder()
         .timeout(std::time::Duration::from_secs(120))
         .build()?;
 
     let local_url = config.base_url.trim_end_matches('/');
     query_single_endpoint(&local_client, local_url, &config.gen_model, &config.provider, &config.api_key, prompt).await
+}
+
+pub async fn query_coder_with_config(prompt: &str, config: &LlmConfig) -> Result<String> {
+    let mode = config.pipeline_mode.to_lowercase();
+
+    if (mode == "auto" || mode == "full_remote") && !config.remote_base_url.trim().is_empty() {
+        let remote_url = config.remote_base_url.trim_end_matches('/');
+        let model = if !config.remote_gen_model.is_empty() { &config.remote_gen_model } else { &config.gen_model };
+
+        info!("⚡ [Coder Remote-First] Querying Remote Coder ({}) with model '{}'...", remote_url, model);
+
+        let remote_client = Client::builder()
+            .timeout(std::time::Duration::from_secs(120))
+            .connect_timeout(std::time::Duration::from_secs(3))
+            .build()?;
+
+        match query_single_endpoint(&remote_client, remote_url, model, &config.provider, &config.api_key, prompt).await {
+            Ok(res) => {
+                info!("✅ [Coder Remote Success] Received response from Remote Coder ({})", remote_url);
+                return Ok(res);
+            }
+            Err(err) => {
+                info!("⚠️ [Coder Failover] Remote Coder ({}) unreachable ({}). Failing over to Local Coder ({})...", remote_url, err, config.base_url);
+            }
+        }
+    }
+
+    // Local Host Execution (Local Coder model)
+    let local_client = Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()?;
+
+    let local_url = config.base_url.trim_end_matches('/');
+    query_single_endpoint(&local_client, local_url, &config.gen_model, &config.provider, &config.api_key, prompt).await
+}
+
+pub async fn query_llm_with_config(prompt: &str, config: &LlmConfig) -> Result<String> {
+    query_coder_with_config(prompt, config).await
 }
 
 async fn query_single_endpoint(client: &Client, base_url: &str, model: &str, provider: &str, api_key: &str, prompt: &str) -> Result<String> {
