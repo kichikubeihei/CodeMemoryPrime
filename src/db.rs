@@ -187,6 +187,34 @@ pub fn init_database(db_path: &str) -> Result<()> {
         [],
     )?;
 
+    // 13. Session Handoffs table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS session_handoffs (
+            project_name TEXT PRIMARY KEY,
+            task_goal TEXT,
+            completed_steps TEXT,
+            open_questions TEXT,
+            active_files TEXT,
+            timestamp TEXT
+        )",
+        [],
+    )?;
+
+    // 14. Pattern Memory table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS pattern_memory (
+            id TEXT PRIMARY KEY,
+            project_name TEXT,
+            pattern_type TEXT,
+            description TEXT,
+            code_snippet TEXT,
+            outcome TEXT,
+            occurrences INTEGER,
+            timestamp TEXT
+        )",
+        [],
+    )?;
+
     Ok(())
 }
 
