@@ -174,6 +174,19 @@ pub fn init_database(db_path: &str) -> Result<()> {
         [],
     )?;
 
+    // 12. Level 3 Ringer Interceptor Query Cache table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS llm_query_cache (
+            prompt_hash TEXT PRIMARY KEY,
+            model TEXT,
+            prompt_text TEXT,
+            response_text TEXT,
+            timestamp TEXT,
+            tokens_saved INTEGER
+        )",
+        [],
+    )?;
+
     Ok(())
 }
 

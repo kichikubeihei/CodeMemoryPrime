@@ -2,7 +2,158 @@ use anyhow::{anyhow, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use tracing::info;
+
+fn compute_prompt_hash(model: &str, prompt: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(model.as_bytes());
+    hasher.update(b"::");
+    hasher.update(prompt.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+pub fn get_ringer_cache(model: &str, prompt: &str) -> Option<String> {
+    let enabled = std::env::var("MCP_RINGER_CACHE_ENABLED")
+        .map(|v| v.parse::<bool>().unwrap_or(true))
+        .unwrap_or(true);
+
+    if !enabled {
+        return None;
+    }
+
+    let db_path = crate::get_db_path();
+    let _ = crate::db::init_database(&db_path);
+    let conn = rusqlite::Connection::open(&db_path).ok()?;
+    let hash = compute_prompt_hash(model, prompt);
+
+    let result: Option<(String, i64)> = conn
+        .query_row(
+            "SELECT response_text, tokens_saved FROM llm_query_cache WHERE prompt_hash = ?1",
+            rusqlite::params![hash],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .ok();
+
+    if let Some((resp, tokens_saved)) = result {
+        info!("🎯 [Level 3 Ringer Cache HIT] Replayed response for hash {} (0 Tokens Spent, {} Tokens Saved)", &hash[..8], tokens_saved);
+        
+        let timestamp = chrono::Utc::now().to_rfc3339();
+        let _ = conn.execute(
+            "INSERT INTO token_analytics (id, timestamp, operation, tokens_used, tokens_without_memory, token_savings, accuracy_notes, project_name)
+             VALUES (?1, ?2, 'ringer_cache_hit', 0, ?3, ?3, 'Level 3 Ringer Cache Hit (0 Tokens)', 'Global')",
+            rusqlite::params![uuid::Uuid::new_v4().to_string(), timestamp, tokens_saved],
+        );
+
+        return Some(resp);
+    }
+
+    None
+}
+
+pub fn save_ringer_cache(model: &str, prompt: &str, response: &str) {
+    let enabled = std::env::var("MCP_RINGER_CACHE_ENABLED")
+        .map(|v| v.parse::<bool>().unwrap_or(true))
+        .unwrap_or(true);
+
+    if !enabled || response.trim().is_empty() {
+        return;
+    }
+
+    let db_path = crate::get_db_path();
+    let _ = crate::db::init_database(&db_path);
+    if let Ok(conn) = rusqlite::Connection::open(&db_path) {
+        let hash = compute_prompt_hash(model, prompt);
+        let timestamp = chrono::Utc::now().to_rfc3339();
+        let tokens_saved = (prompt.len() / 4) as i64;
+
+        let _ = conn.execute(
+            "INSERT OR REPLACE INTO llm_query_cache (prompt_hash, model, prompt_text, response_text, timestamp, tokens_saved)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![hash, model, prompt, response, timestamp, tokens_saved],
+        );
+        info!("💾 [Level 3 Ringer Cache STORE] Saved response for hash {} into SQLite Ringer Cache", &hash[..8]);
+    }
+}
+
+async fn query_single_endpoint(client: &Client, base_url: &str, model: &str, provider: &str, api_key: &str, prompt: &str) -> Result<String> {
+    // Check Level 3 Ringer Interceptor Cache first!
+    if let Some(cached_resp) = get_ringer_cache(model, prompt) {
+        return Ok(cached_resp);
+    }
+
+    if provider.to_lowercase() == "openai" {
+        // OpenAI-compatible endpoint (/v1/chat/completions or /chat/completions)
+        let endpoint = if base_url.ends_with("/v1") {
+            format!("{}/chat/completions", base_url)
+        } else {
+            format!("{}/v1/chat/completions", base_url)
+        };
+
+        let request_body = json!({
+            "model": model,
+            "messages": [
+                { "role": "user", "content": prompt }
+            ]
+        });
+
+        info!("Querying OpenAI-compatible API at {} with model {}", endpoint, model);
+
+        let mut req = client.post(&endpoint).json(&request_body);
+        if !api_key.is_empty() {
+            req = req.header("Authorization", format!("Bearer {}", api_key));
+        }
+
+        let response = req.send().await?;
+        if !response.status().is_success() {
+            return Err(anyhow!("OpenAI-compatible API returned status {}: {}", response.status(), response.text().await.unwrap_or_default()));
+        }
+
+        let json_resp: Value = response.json().await?;
+        if let Some(content) = json_resp.get("choices")
+            .and_then(|c| c.get(0))
+            .and_then(|m| m.get("message"))
+            .and_then(|txt| txt.get("content"))
+            .and_then(|s| s.as_str())
+        {
+            let res_str = content.to_string();
+            save_ringer_cache(model, prompt, &res_str);
+            Ok(res_str)
+        } else {
+            Err(anyhow!("Invalid response format from OpenAI-compatible API"))
+        }
+    } else {
+        // Default Ollama native API (/api/generate) with GPU KV-cache keep_alive optimization
+        let endpoint = format!("{}/api/generate", base_url);
+        let request_body = json!({
+            "model": model,
+            "prompt": prompt,
+            "stream": false,
+            "keep_alive": "60m"
+        });
+
+        info!("Querying Ollama at {} with model {}", endpoint, model);
+
+        let response = client
+            .post(&endpoint)
+            .json(&request_body)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!("Ollama API returned error: {}", response.status()));
+        }
+
+        let json_resp: Value = response.json().await?;
+        if let Some(resp) = json_resp.get("response").and_then(|r| r.as_str()) {
+            let res_str = resp.to_string();
+            save_ringer_cache(model, prompt, &res_str);
+            Ok(res_str)
+        } else {
+            Err(anyhow!("Invalid response format from Ollama"))
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlmConfig {
@@ -206,75 +357,6 @@ pub async fn query_llm_with_config(prompt: &str, config: &LlmConfig) -> Result<S
     query_coder_with_config(prompt, config).await
 }
 
-async fn query_single_endpoint(client: &Client, base_url: &str, model: &str, provider: &str, api_key: &str, prompt: &str) -> Result<String> {
-    if provider.to_lowercase() == "openai" {
-        // OpenAI-compatible endpoint (/v1/chat/completions or /chat/completions)
-        let endpoint = if base_url.ends_with("/v1") {
-            format!("{}/chat/completions", base_url)
-        } else {
-            format!("{}/v1/chat/completions", base_url)
-        };
-
-        let request_body = json!({
-            "model": model,
-            "messages": [
-                { "role": "user", "content": prompt }
-            ]
-        });
-
-        info!("Querying OpenAI-compatible API at {} with model {}", endpoint, model);
-
-        let mut req = client.post(&endpoint).json(&request_body);
-        if !api_key.is_empty() {
-            req = req.header("Authorization", format!("Bearer {}", api_key));
-        }
-
-        let response = req.send().await?;
-        if !response.status().is_success() {
-            return Err(anyhow!("OpenAI-compatible API returned status {}: {}", response.status(), response.text().await.unwrap_or_default()));
-        }
-
-        let json_resp: Value = response.json().await?;
-        if let Some(content) = json_resp.get("choices")
-            .and_then(|c| c.get(0))
-            .and_then(|m| m.get("message"))
-            .and_then(|txt| txt.get("content"))
-            .and_then(|s| s.as_str())
-        {
-            Ok(content.to_string())
-        } else {
-            Err(anyhow!("Invalid response format from OpenAI-compatible API"))
-        }
-    } else {
-        // Default Ollama native API (/api/generate)
-        let endpoint = format!("{}/api/generate", base_url);
-        let request_body = json!({
-            "model": model,
-            "prompt": prompt,
-            "stream": false
-        });
-
-        info!("Querying Ollama at {} with model {}", endpoint, model);
-
-        let response = client
-            .post(&endpoint)
-            .json(&request_body)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            return Err(anyhow!("Ollama API returned error: {}", response.status()));
-        }
-
-        let json_resp: Value = response.json().await?;
-        if let Some(resp) = json_resp.get("response").and_then(|r| r.as_str()) {
-            Ok(resp.to_string())
-        } else {
-            Err(anyhow!("Invalid response format from Ollama"))
-        }
-    }
-}
-
 pub async fn generate_embedding(text: &str) -> Result<Vec<f32>> {
     let config = get_config_from_db_or_env();
     generate_embedding_with_config(text, &config).await
@@ -455,5 +537,24 @@ pub async fn auto_detect_llm_setup() -> String {
                 cfg.base_url
             )
         }
+    }
+}
+
+#[cfg(test)]
+mod ringer_tests {
+    use super::*;
+
+    #[test]
+    fn test_ringer_cache_store_and_hit() {
+        let model = "test_model_v1";
+        let prompt = "Explain function foo() in Rust";
+        let expected_response = "Function foo() returns 42.";
+
+        // Clear any previous test hash entry
+        save_ringer_cache(model, prompt, expected_response);
+
+        let cached = get_ringer_cache(model, prompt);
+        assert!(cached.is_some(), "Ringer Cache should return a hit for stored prompt!");
+        assert_eq!(cached.unwrap(), expected_response);
     }
 }
