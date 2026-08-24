@@ -13,6 +13,8 @@ pub mod handoff;
 pub mod pattern_miner;
 pub mod git_indexer;
 pub mod terminal_bounder;
+pub mod pinned_memory;
+pub mod payload_minifier;
 
 pub fn get_db_path() -> String {
     let base = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
