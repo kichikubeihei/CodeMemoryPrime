@@ -11,6 +11,8 @@ pub mod path_utils;
 pub mod unslop_sanitizer;
 pub mod handoff;
 pub mod pattern_miner;
+pub mod git_indexer;
+pub mod terminal_bounder;
 
 pub fn get_db_path() -> String {
     let base = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
