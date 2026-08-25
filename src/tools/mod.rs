@@ -18,7 +18,7 @@ pub fn list_all_tools() -> Vec<Value> {
         return vec![
             serde_json::json!({
                 "name": "orchestrate_code_search",
-                "description": "Specialist agent orchestrator for codebase search, RRF hybrid semantic retrieval, AST call-graph tracing, and dependency mapping.",
+                "description": "MANDATORY: Always use this tool FIRST for codebase navigation and symbol retrieval. Automatically performs sub-10ms git diff re-indexing and returns complete AST symbol definitions, exact line numbers, code snippets, and caller graphs in 1 unified step. DO NOT call index_workspace manually, and DO NOT read files in small 20-line slices.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -30,7 +30,7 @@ pub fn list_all_tools() -> Vec<Value> {
             }),
             serde_json::json!({
                 "name": "orchestrate_security_audit",
-                "description": "Specialist agent orchestrator for DevSecOps audits: verifies HMAC/Merkle memory integrity, scans for prompt injections, unhandled error panics, and supply chain malware.",
+                "description": "Specialist agent orchestrator for DevSecOps audits: verifies HMAC/Merkle memory integrity, scans for prompt injections, unhandled error panics, and supply chain malware in 1 step.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -41,7 +41,7 @@ pub fn list_all_tools() -> Vec<Value> {
             }),
             serde_json::json!({
                 "name": "orchestrate_refactor_and_fix",
-                "description": "Specialist agent orchestrator for refactoring: checks historical ADR decisions, calculates failure-aware blast radius, and prepares self-healing refactoring guidelines.",
+                "description": "MANDATORY: Always use this tool BEFORE modifying code. Automatically fetches historical ADR decisions, calculates failure-aware blast radius, and prepares self-healing refactoring guidelines. DO NOT manually re-index workspace.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -65,7 +65,7 @@ pub fn list_all_tools() -> Vec<Value> {
             }),
             serde_json::json!({
                 "name": "orchestrate_spec_and_test",
-                "description": "Specialist agent orchestrator for TDD spec generation: deconstructs raw prompts into test-driven specifications with pass/fail acceptance criteria.",
+                "description": "Specialist agent orchestrator for TDD spec generation & persistent alignment: conducts interactive spec alignment interviews, locks invariants, and supersedes old choices.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
