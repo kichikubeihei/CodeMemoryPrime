@@ -195,10 +195,12 @@ pub fn init_database(db_path: &str) -> Result<()> {
             completed_steps TEXT,
             open_questions TEXT,
             active_files TEXT,
-            timestamp TEXT
+            timestamp TEXT,
+            integrity_hash TEXT
         )",
         [],
     )?;
+    let _ = conn.execute("ALTER TABLE session_handoffs ADD COLUMN integrity_hash TEXT", []);
 
     // 14. Pattern Memory table
     conn.execute(
@@ -210,10 +212,12 @@ pub fn init_database(db_path: &str) -> Result<()> {
             code_snippet TEXT,
             outcome TEXT,
             occurrences INTEGER,
-            timestamp TEXT
+            timestamp TEXT,
+            integrity_hash TEXT
         )",
         [],
     )?;
+    let _ = conn.execute("ALTER TABLE pattern_memory ADD COLUMN integrity_hash TEXT", []);
 
     Ok(())
 }
