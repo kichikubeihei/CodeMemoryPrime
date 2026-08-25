@@ -19,6 +19,7 @@ pub mod doc_cleaner;
 pub mod model_router;
 pub mod refactor_decision;
 pub mod memory_integrity;
+pub mod web_ingest;
 
 pub fn get_db_path() -> String {
     let base = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
