@@ -48,7 +48,7 @@ pub fn query_hybrid_codebase(
         let mut rows = stmt.query(rusqlite::params![project_name])?;
         while let Some(row) = rows.next()? {
             let r_id: String = row.get(0)?;
-            let blob_emb: Vec<u8> = row.get(8)?;
+            let blob_emb: Vec<u8> = row.get::<_, Option<Vec<u8>>>(8)?.unwrap_or_default();
             let chunk_emb = blob_to_vector(&blob_emb);
             let sim = cosine_similarity(query_embedding, &chunk_emb);
             semantic_candidates.push((r_id, sim as f64));
@@ -58,7 +58,7 @@ pub fn query_hybrid_codebase(
         let mut rows = stmt.query([])?;
         while let Some(row) = rows.next()? {
             let r_id: String = row.get(0)?;
-            let blob_emb: Vec<u8> = row.get(8)?;
+            let blob_emb: Vec<u8> = row.get::<_, Option<Vec<u8>>>(8)?.unwrap_or_default();
             let chunk_emb = blob_to_vector(&blob_emb);
             let sim = cosine_similarity(query_embedding, &chunk_emb);
             semantic_candidates.push((r_id, sim as f64));
