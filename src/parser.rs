@@ -181,6 +181,15 @@ fn extract_logical_braced_chunks(file_name: &str, content: &str, signature_re: &
 fn extract_svelte_html_chunks(file_name: &str, content: &str) -> Vec<Chunk> {
     let mut chunks = Vec::new();
 
+    // 0. Unified Whole-Component SFC Chunk
+    chunks.push(Chunk {
+        chunk_type: "svelte_sfc".to_string(),
+        name: format!("{} Full SFC", file_name),
+        code_content: content.to_string(),
+        summary: format!("Full Svelte Single File Component (SFC) for {}", file_name),
+        parent_context: format!("File: {}", file_name),
+    });
+
     // 1. Script Block Parsing (TS script + Svelte 5 Runes)
     let script_re = Regex::new(r"(?s)<script.*?>([\s\S]*?)<\/script>").unwrap();
     let rune_re = Regex::new(r"(\$state|\$derived|\$props|\$effect|\$inspect)\s*\([^)]*\)").unwrap();

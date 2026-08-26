@@ -67,20 +67,34 @@ pub fn query_hybrid_codebase(
     
     semantic_candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     
-    // 2. Keyword FTS-like search
+    // 2. Keyword FTS-like search (Multi-Term Tokenization)
+    let fts_query = {
+        let terms: Vec<String> = query_text
+            .split_whitespace()
+            .map(|t| t.trim_matches(|c: char| !c.is_alphanumeric() && c != '_' && c != '$'))
+            .filter(|t| t.len() > 1)
+            .map(|t| format!("\"{}\"*", t))
+            .collect();
+        if terms.is_empty() {
+            query_text.to_string()
+        } else {
+            terms.join(" OR ")
+        }
+    };
+
     let mut fts_ids: Vec<String> = Vec::new();
     let fts_res: Result<()> = (|| {
         let mut fts_sql = "SELECT id FROM code_chunks_fts WHERE code_chunks_fts MATCH ?1".to_string();
         if project_name.to_lowercase() != "all" {
             fts_sql.push_str(" AND project_name = ?2");
             let mut fts_stmt = conn.prepare(&fts_sql)?;
-            let mut rows = fts_stmt.query(rusqlite::params![query_text, project_name])?;
+            let mut rows = fts_stmt.query(rusqlite::params![fts_query, project_name])?;
             while let Some(row) = rows.next()? {
                 fts_ids.push(row.get(0)?);
             }
         } else {
             let mut fts_stmt = conn.prepare(&fts_sql)?;
-            let mut rows = fts_stmt.query(rusqlite::params![query_text])?;
+            let mut rows = fts_stmt.query(rusqlite::params![fts_query])?;
             while let Some(row) = rows.next()? {
                 fts_ids.push(row.get(0)?);
             }
