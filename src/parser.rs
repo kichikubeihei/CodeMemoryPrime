@@ -180,46 +180,118 @@ fn extract_logical_braced_chunks(file_name: &str, content: &str, signature_re: &
 
 fn extract_svelte_html_chunks(file_name: &str, content: &str) -> Vec<Chunk> {
     let mut chunks = Vec::new();
-    
+
+    // 1. Script Block Parsing (TS script + Svelte 5 Runes)
     let script_re = Regex::new(r"(?s)<script.*?>([\s\S]*?)<\/script>").unwrap();
-    let mut i = 1;
+    let rune_re = Regex::new(r"(\$state|\$derived|\$props|\$effect|\$inspect)\s*\([^)]*\)").unwrap();
+    let sig_re = Regex::new(r"(?m)^\s*(?:export\s+)?(?:async\s+)?(?:function|class|interface|type)\s+([a-zA-Z0-9_$]+)").unwrap();
+
     for cap in script_re.captures_iter(content) {
-        chunks.push(Chunk {
-            chunk_type: "script".to_string(),
-            name: format!("script_block_{}", i),
-            code_content: cap.get(0).unwrap().as_str().to_string(),
-            summary: format!("Script block {} in Svelte component {}", i, file_name),
-            parent_context: format!("File: {}", file_name),
-        });
-        i += 1;
+        if let Some(script_content) = cap.get(1) {
+            let s_text = script_content.as_str();
+
+            // Extract Svelte 5 Runes ($state, $derived, $props, etc.)
+            for r_cap in rune_re.captures_iter(s_text) {
+                let rune_type = r_cap.get(1).map(|m| m.as_str()).unwrap_or("$rune");
+                let body = r_cap.get(0).map(|m| m.as_str()).unwrap_or("");
+                chunks.push(Chunk {
+                    chunk_type: "svelte_rune".to_string(),
+                    name: format!("rune_{}", rune_type),
+                    code_content: body.to_string(),
+                    summary: format!("Svelte 5 {} declaration in {}", rune_type, file_name),
+                    parent_context: format!("File: {}", file_name),
+                });
+            }
+
+            // Extract JS/TS logical function & type chunks from script
+            let script_chunks = extract_logical_braced_chunks(file_name, s_text, &sig_re);
+            for mut sc in script_chunks {
+                sc.chunk_type = "svelte_script".to_string();
+                chunks.push(sc);
+            }
+
+            // Fallback for script if no sub-chunks extracted
+            if chunks.is_empty() {
+                chunks.push(Chunk {
+                    chunk_type: "svelte_script".to_string(),
+                    name: "script_block".to_string(),
+                    code_content: s_text.to_string(),
+                    summary: format!("Script block in Svelte component {}", file_name),
+                    parent_context: format!("File: {}", file_name),
+                });
+            }
+        }
     }
-    
+
+    // 2. Style Block Parsing (CSS / SCSS Class Rule Extraction)
     let style_re = Regex::new(r"(?s)<style.*?>([\s\S]*?)<\/style>").unwrap();
-    let mut j = 1;
+    let css_rule_re = Regex::new(r"(?s)([\.\#][a-zA-Z0-9_-]+)\s*\{([^}]*)\}").unwrap();
+
     for cap in style_re.captures_iter(content) {
-        chunks.push(Chunk {
-            chunk_type: "style".to_string(),
-            name: format!("style_block_{}", j),
-            code_content: cap.get(0).unwrap().as_str().to_string(),
-            summary: format!("Style block {} in Svelte component {}", j, file_name),
-            parent_context: format!("File: {}", file_name),
-        });
-        j += 1;
+        if let Some(style_content) = cap.get(1) {
+            let st_text = style_content.as_str();
+            let mut style_chunk_count = 0;
+
+            for rule_cap in css_rule_re.captures_iter(st_text) {
+                let selector = rule_cap.get(1).map(|m| m.as_str().trim()).unwrap_or("css_rule");
+                let body = rule_cap.get(0).map(|m| m.as_str()).unwrap_or("");
+
+                chunks.push(Chunk {
+                    chunk_type: "svelte_style".to_string(),
+                    name: selector.to_string(),
+                    code_content: body.to_string(),
+                    summary: format!("CSS Rule '{}' in Svelte component {}", selector, file_name),
+                    parent_context: format!("File: {}", file_name),
+                });
+                style_chunk_count += 1;
+            }
+
+            if style_chunk_count == 0 {
+                chunks.push(Chunk {
+                    chunk_type: "svelte_style".to_string(),
+                    name: "style_block".to_string(),
+                    code_content: st_text.to_string(),
+                    summary: format!("Style block in Svelte component {}", file_name),
+                    parent_context: format!("File: {}", file_name),
+                });
+            }
+        }
     }
-    
+
+    // 3. HTML Template Component & Control Block Extraction
     let mut markup = script_re.replace_all(content, "").to_string();
     markup = style_re.replace_all(&markup, "").to_string();
     let markup_trim = markup.trim().to_string();
+
     if !markup_trim.is_empty() {
-        chunks.push(Chunk {
-            chunk_type: "markup".to_string(),
-            name: "template_markup".to_string(),
-            code_content: markup_trim,
-            summary: format!("HTML template markup in Svelte component {}", file_name),
-            parent_context: format!("File: {}", file_name),
-        });
+        let component_re = Regex::new(r"(?s)<([A-Z][a-zA-Z0-9_]*)([\s\S]*?)>").unwrap();
+        let mut comp_count = 0;
+
+        for c_cap in component_re.captures_iter(&markup_trim) {
+            let comp_name = c_cap.get(1).map(|m| m.as_str()).unwrap_or("Component");
+            let comp_body = c_cap.get(0).map(|m| m.as_str()).unwrap_or("");
+
+            chunks.push(Chunk {
+                chunk_type: "svelte_template".to_string(),
+                name: format!("<{}>", comp_name),
+                code_content: comp_body.to_string(),
+                summary: format!("Svelte template component <{}> in {}", comp_name, file_name),
+                parent_context: format!("File: {}", file_name),
+            });
+            comp_count += 1;
+        }
+
+        if comp_count == 0 {
+            chunks.push(Chunk {
+                chunk_type: "svelte_template".to_string(),
+                name: "template_markup".to_string(),
+                code_content: markup_trim,
+                summary: format!("HTML template markup in Svelte component {}", file_name),
+                parent_context: format!("File: {}", file_name),
+            });
+        }
     }
-    
+
     chunks
 }
 
@@ -386,7 +458,7 @@ pub fn parse_file_chunks(file_path: &str, content: &str) -> Vec<Chunk> {
         chunks = extract_logical_braced_chunks(file_name, content, &rs_sig);
     } else if ext == "css" {
         chunks = extract_logical_braced_chunks(file_name, content, &css_sig);
-    } else if ["html", "svelte"].contains(&ext.as_str()) {
+    } else if ["html", "svelte", "vue", "astro"].contains(&ext.as_str()) {
         chunks = extract_svelte_html_chunks(file_name, content);
     }
     
@@ -402,4 +474,40 @@ pub fn parse_file_chunks(file_path: &str, content: &str) -> Vec<Chunk> {
     }
     
     chunks
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_svelte5_ast_segmenter() {
+        let svelte_code = r#"
+            <script lang="ts">
+                let count = $state(0);
+                let double = $derived(count * 2);
+                export function increment() { count++; }
+            </script>
+
+            <style>
+                .editor-zoom-bar-floating {
+                    position: absolute;
+                    top: 10px;
+                }
+            </style>
+
+            <div class="editor-zoom-bar-floating">
+                <EditorToolbar />
+            </div>
+        "#;
+
+        let chunks = parse_file_chunks("Editor.svelte", svelte_code);
+        assert!(!chunks.is_empty(), "Chunks should not be empty for Svelte component");
+
+        let has_rune = chunks.iter().any(|c| c.chunk_type == "svelte_rune");
+        let has_css = chunks.iter().any(|c| c.name.contains("editor-zoom-bar-floating"));
+
+        assert!(has_rune, "Should extract Svelte 5 $state/$derived runes as discrete AST chunks");
+        assert!(has_css, "Should extract .editor-zoom-bar-floating CSS selector as discrete AST chunk");
+    }
 }

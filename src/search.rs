@@ -135,8 +135,24 @@ pub fn query_hybrid_codebase(
             let summary: String = row.get(5)?;
             let proj: String = row.get(6)?;
             let parent_context: String = row.get::<_, Option<String>>(7)?.unwrap_or_default();
-            
-            // imports
+
+            // UI Component & Svelte AST Boosting:
+            // If search query targets CSS selectors (.class), Svelte runes ($state), or component elements,
+            // boost UI component chunks and penalize root config files (Cargo.toml, package.json).
+            let mut final_score = rrf_score;
+            let q_lower = query_text.to_lowercase();
+            let fn_lower = file_name.to_lowercase();
+
+            let is_root_config = fn_lower == "cargo.toml" || fn_lower == "package.json" || fn_lower == "svelte.config.js" || fn_lower.ends_with(".yaml");
+            let is_ui_chunk = chunk_type.starts_with("svelte_") || file_path.ends_with(".svelte") || file_path.ends_with(".vue") || file_path.ends_with(".tsx");
+            let is_ui_query = q_lower.starts_with('.') || q_lower.starts_with('#') || q_lower.contains("$state") || q_lower.contains("$props") || q_lower.contains("$derived") || q_lower.contains("zoom") || q_lower.contains("editor") || q_lower.contains("button") || q_lower.contains("modal") || q_lower.contains("component");
+
+            if is_ui_query && is_ui_chunk {
+                final_score *= 2.0; // 100% boost for Svelte UI elements on UI queries
+            }
+            if is_ui_query && is_root_config {
+                final_score *= 0.2; // 80% penalty for root config files on UI queries
+            }
             let mut imp_stmt = conn.prepare("SELECT import_path FROM code_dependencies WHERE source_file = ?1")?;
             let mut imp_rows = imp_stmt.query(rusqlite::params![file_path])?;
             let mut imports = Vec::new();
@@ -167,13 +183,15 @@ pub fn query_hybrid_codebase(
                 summary,
                 parent_context,
                 project_name: proj,
-                rrf_score,
+                rrf_score: final_score,
                 imports,
                 imported_by,
             });
         }
     }
-    
+
+    results.sort_by(|a, b| b.rrf_score.partial_cmp(&a.rrf_score).unwrap_or(std::cmp::Ordering::Equal));
+
     Ok(results)
 }
 
