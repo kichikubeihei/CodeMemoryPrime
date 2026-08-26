@@ -137,21 +137,35 @@ pub fn query_hybrid_codebase(
             let parent_context: String = row.get::<_, Option<String>>(7)?.unwrap_or_default();
 
             // UI Component & Svelte AST Boosting:
-            // If search query targets CSS selectors (.class), Svelte runes ($state), or component elements,
-            // boost UI component chunks and penalize root config files (Cargo.toml, package.json).
+            // Boost UI components and exact component name matches (e.g. EditorToolbar, Editor.svelte),
+            // while penalizing root config files, lockfiles, and test setup scripts.
             let mut final_score = rrf_score;
             let q_lower = query_text.to_lowercase();
             let fn_lower = file_name.to_lowercase();
 
-            let is_root_config = fn_lower == "cargo.toml" || fn_lower == "package.json" || fn_lower == "svelte.config.js" || fn_lower.ends_with(".yaml");
-            let is_ui_chunk = chunk_type.starts_with("svelte_") || file_path.ends_with(".svelte") || file_path.ends_with(".vue") || file_path.ends_with(".tsx");
-            let is_ui_query = q_lower.starts_with('.') || q_lower.starts_with('#') || q_lower.contains("$state") || q_lower.contains("$props") || q_lower.contains("$derived") || q_lower.contains("zoom") || q_lower.contains("editor") || q_lower.contains("button") || q_lower.contains("modal") || q_lower.contains("component");
+            let is_config_or_test_script = fn_lower.contains("config")
+                || fn_lower.contains("lock")
+                || fn_lower == "cargo.toml"
+                || fn_lower == "package.json"
+                || fn_lower == "test_db.js"
+                || fn_lower.ends_with(".yaml")
+                || fn_lower.ends_with(".lock");
 
-            if is_ui_query && is_ui_chunk {
+            let is_ui_chunk = chunk_type.starts_with("svelte_") || file_path.ends_with(".svelte") || file_path.ends_with(".vue") || file_path.ends_with(".tsx");
+            let is_ui_query = q_lower.starts_with('.') || q_lower.starts_with('#') || q_lower.contains("$state") || q_lower.contains("$props") || q_lower.contains("$derived") || q_lower.contains("zoom") || q_lower.contains("editor") || q_lower.contains("button") || q_lower.contains("modal") || q_lower.contains("component") || q_lower.contains("toolbar") || q_lower.contains("popover");
+
+            // Direct Component Name Matching: If query mentions 'EditorToolbar' and file is 'EditorToolbar.svelte' or 'Editor.svelte'
+            let stem = std::path::Path::new(&file_name).file_stem().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
+            let is_direct_component_name_match = !stem.is_empty() && stem.len() > 3 && q_lower.contains(&stem);
+
+            if is_direct_component_name_match {
+                final_score *= 3.0; // 200% boost for direct component name match
+            } else if is_ui_query && is_ui_chunk {
                 final_score *= 2.0; // 100% boost for Svelte UI elements on UI queries
             }
-            if is_ui_query && is_root_config {
-                final_score *= 0.2; // 80% penalty for root config files on UI queries
+
+            if is_ui_query && is_config_or_test_script {
+                final_score *= 0.1; // 90% penalty for config & setup test scripts on UI queries
             }
             let mut imp_stmt = conn.prepare("SELECT import_path FROM code_dependencies WHERE source_file = ?1")?;
             let mut imp_rows = imp_stmt.query(rusqlite::params![file_path])?;
