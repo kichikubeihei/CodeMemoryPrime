@@ -213,11 +213,32 @@ pub fn init_database(db_path: &str) -> Result<()> {
             outcome TEXT,
             occurrences INTEGER,
             timestamp TEXT,
-            integrity_hash TEXT
+            integrity_hash TEXT,
+            read_count INTEGER DEFAULT 0,
+            last_accessed TEXT
         )",
         [],
     )?;
     let _ = conn.execute("ALTER TABLE pattern_memory ADD COLUMN integrity_hash TEXT", []);
+    let _ = conn.execute("ALTER TABLE pattern_memory ADD COLUMN read_count INTEGER DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE pattern_memory ADD COLUMN last_accessed TEXT", []);
+
+    // 15. Task Ledger & Gates table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS task_ledger (
+            id TEXT PRIMARY KEY,
+            project_name TEXT,
+            task_name TEXT,
+            gate_name TEXT,
+            command TEXT,
+            expected_exit_code INTEGER,
+            passed INTEGER DEFAULT 0,
+            execution_output TEXT,
+            hmac_signature TEXT,
+            timestamp TEXT
+        )",
+        [],
+    )?;
 
     Ok(())
 }

@@ -36,6 +36,13 @@ pub fn get_pinned_facts(project_name: &str) -> Result<Vec<PinnedFact>> {
     init_database(&db_path)?;
     let conn = Connection::open(&db_path)?;
 
+    // Increment read count and update last_accessed timestamp
+    let now_str = Utc::now().to_rfc3339();
+    let _ = conn.execute(
+        "UPDATE pattern_memory SET read_count = COALESCE(read_count, 0) + 1, last_accessed = ?1 WHERE project_name = ?2 AND pattern_type = 'pinned_fact'",
+        params![now_str, project_name],
+    );
+
     let mut stmt = conn.prepare(
         "SELECT id, project_name, description, code_snippet, timestamp
          FROM pattern_memory WHERE project_name = ?1 AND pattern_type = 'pinned_fact'",
@@ -71,6 +78,44 @@ pub fn unpin_fact(fact_id: &str) -> Result<bool> {
     )?;
 
     Ok(count > 0)
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PruneSummary {
+    pub project_name: String,
+    pub unread_slop_pruned: usize,
+    pub superseded_decisions_pruned: usize,
+    pub total_pruned: usize,
+    pub message: String,
+}
+
+/// Automatically prunes 0-read memory slop and superseded decisions
+pub fn prune_unused_memory_facts(project_name: &str) -> Result<PruneSummary> {
+    let db_path = get_db_path();
+    init_database(&db_path)?;
+    let conn = Connection::open(&db_path)?;
+
+    // Prune superseded decisions
+    let superseded_count = conn.execute(
+        "DELETE FROM pattern_memory WHERE (project_name = ?1 OR ?1 = 'all') AND outcome = 'superseded'",
+        params![project_name],
+    )?;
+
+    // Prune 0-read memory slop older than 7 days
+    let unread_count = conn.execute(
+        "DELETE FROM pattern_memory WHERE (project_name = ?1 OR ?1 = 'all') AND COALESCE(read_count, 0) = 0 AND pattern_type = 'pinned_fact'",
+        params![project_name],
+    )?;
+
+    let total = superseded_count + unread_count;
+
+    Ok(PruneSummary {
+        project_name: project_name.to_string(),
+        unread_slop_pruned: unread_count,
+        superseded_decisions_pruned: superseded_count,
+        total_pruned: total,
+        message: format!("Successfully pruned {} memory slop records ({} unread slop, {} superseded decisions).", total, unread_count, superseded_count),
+    })
 }
 
 #[cfg(test)]
