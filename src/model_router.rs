@@ -22,25 +22,25 @@ pub fn route_task(task_type: &str, payload_bytes: usize) -> TaskRouteRecommendat
     {
         TaskRouteRecommendation {
             task_type: task_type.to_string(),
-            recommended_tier: "Tier1_Lightweight".to_string(),
+            recommended_tier: "Tier1_Lightweight_Tailscale".to_string(),
             model_suggestions: vec![
-                "gemini-2.5-flash".to_string(),
-                "claude-3-5-haiku".to_string(),
-                "ollama/qwen2.5-coder:7b".to_string(),
+                "tailscale/qwen2.5-coder:32b (http://100.102.233.128:11434)".to_string(),
+                "tailscale/qwen2.5-coder:14b".to_string(),
+                "antigravity/gemini-3.7-flash".to_string(),
             ],
-            estimated_cost_factor: "1x (Low)".to_string(),
-            rationale: "Task is structural, retrieval-focused, or low-complexity. Using a lightweight model cuts API costs by ~80% with zero quality loss.".to_string(),
+            estimated_cost_factor: "$0.00 Local / Ultra-Low".to_string(),
+            rationale: "Task is structural, retrieval-focused, or low-complexity. Routing to Tailscale workstation (96GB RAM / RTX 5070 Ti) eliminates API quota usage.".to_string(),
         }
     } else {
         TaskRouteRecommendation {
             task_type: task_type.to_string(),
-            recommended_tier: "Tier2_Pro".to_string(),
+            recommended_tier: "Tier2_Pro_Architect".to_string(),
             model_suggestions: vec![
-                "gemini-2.5-pro".to_string(),
-                "claude-3-7-sonnet".to_string(),
-                "gpt-4o".to_string(),
+                "antigravity/claude-sonnet-4.6".to_string(),
+                "antigravity/gemini-3.1-pro".to_string(),
+                "tailscale/llama3.3:70b".to_string(),
             ],
-            estimated_cost_factor: "5x - 10x (High)".to_string(),
+            estimated_cost_factor: "High Reasoning / Balanced Quota".to_string(),
             rationale: "Task involves high-severity auditing, autonomous refactoring, blast radius calculation, or complex TDD spec generation. Tier 2 model required for maximum reasoning.".to_string(),
         }
     }
@@ -53,9 +53,9 @@ mod tests {
     #[test]
     fn test_route_task() {
         let r1 = route_task("search_codebase", 1000);
-        assert_eq!(r1.recommended_tier, "Tier1_Lightweight");
+        assert_eq!(r1.recommended_tier, "Tier1_Lightweight_Tailscale");
 
         let r2 = route_task("calculate_blast_radius", 50000);
-        assert_eq!(r2.recommended_tier, "Tier2_Pro");
+        assert_eq!(r2.recommended_tier, "Tier2_Pro_Architect");
     }
 }
