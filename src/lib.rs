@@ -24,6 +24,7 @@ pub mod refactor_recommender;
 pub mod task_ledger;
 pub mod semver_advisor;
 pub mod ui_design_studio;
+pub mod tailscale_roster;
 
 pub fn get_db_path() -> String {
     let base = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
