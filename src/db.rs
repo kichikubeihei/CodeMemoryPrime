@@ -240,6 +240,36 @@ pub fn init_database(db_path: &str) -> Result<()> {
         [],
     )?;
 
+    // 12. Design Memory Table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS design_memory (
+            id TEXT PRIMARY KEY,
+            project_name TEXT,
+            category TEXT,
+            title TEXT,
+            css_tokens TEXT,
+            inspiration_url TEXT,
+            rules_json TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )",
+        [],
+    )?;
+
+    // 13. UI Components Vault Table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS ui_components (
+            id TEXT PRIMARY KEY,
+            project_name TEXT,
+            component_name TEXT,
+            category TEXT,
+            svelte_template TEXT,
+            props_schema TEXT,
+            a11y_score REAL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )",
+        [],
+    )?;
+
     Ok(())
 }
 
