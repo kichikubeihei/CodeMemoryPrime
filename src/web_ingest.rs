@@ -117,9 +117,10 @@ pub fn ingest_url(url: &str, project_name: &str) -> Result<WebIngestSummary> {
 
 /// Offloads full document analysis to a Local or Tailscale Ollama/vLLM endpoint ($0.00 API cost)
 pub fn analyze_doc_with_local_llm(url_or_text: &str, endpoint: Option<&str>) -> std::result::Result<String, String> {
+    let env_url = std::env::var("OLLAMA_HOST").ok();
     let local_url = endpoint
-        .or_else(|| std::option_env!("OLLAMA_HOST"))
-        .unwrap_or("http://127.0.0.1:11434");
+        .or_else(|| env_url.as_deref())
+        .unwrap_or("http://100.102.233.128:11434");
 
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
