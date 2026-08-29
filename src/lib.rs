@@ -26,6 +26,9 @@ pub mod semver_advisor;
 pub mod ui_design_studio;
 pub mod tailscale_roster;
 pub mod solution_vault;
+pub mod adversarial_test;
+pub mod adaptive_paste;
+pub mod solution_miner;
 
 pub fn get_db_path() -> String {
     let base = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
