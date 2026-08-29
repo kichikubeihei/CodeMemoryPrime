@@ -29,6 +29,7 @@ pub mod solution_vault;
 pub mod adversarial_test;
 pub mod adaptive_paste;
 pub mod solution_miner;
+pub mod failure_vault;
 
 pub fn get_db_path() -> String {
     let base = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
