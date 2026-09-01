@@ -3,7 +3,7 @@ use chrono::Utc;
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SessionHandoff {
     pub project_name: String,
     pub task_goal: String,

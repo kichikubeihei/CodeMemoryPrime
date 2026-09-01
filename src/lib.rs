@@ -30,6 +30,11 @@ pub mod adversarial_test;
 pub mod adaptive_paste;
 pub mod solution_miner;
 pub mod failure_vault;
+pub mod knowledge_graph;
+pub mod profiles;
+pub mod mesh_sync;
+pub mod community_vault;
+pub mod private_vault;
 
 pub fn get_db_path() -> String {
     let base = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
