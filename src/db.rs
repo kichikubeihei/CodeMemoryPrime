@@ -270,6 +270,9 @@ pub fn init_database(db_path: &str) -> Result<()> {
         [],
     )?;
 
+    // 14. Universal Knowledge Graph Tables (Nodes & Edges)
+    crate::knowledge_graph::init_knowledge_graph_tables(&conn)?;
+
     Ok(())
 }
 

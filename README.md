@@ -1,93 +1,74 @@
-# CodeMemoryPrime (cmp)
+# CodeMemoryPrime Core (`mcp-coder-memory-rust`)
 
-```
-+-----------------------------------------------------------------------+
-|  ___  _   _  ___                                                      |
-| / __|| | | || _ \  CodeMemoryPrime (cmp)                              |
-| |(__ | _|_ ||  _/  A lightweight memory & codebase helper for AI tools|
-| \___||_| |_||_|                                                       |
-+-----------------------------------------------------------------------+
-```
-
-[![License: BSL-1.1](https://img.shields.io/badge/License-BSL_1.1-blue.svg)](LICENSE.md)
 [![Language: Rust](https://img.shields.io/badge/Language-Rust-orange.svg)](https://www.rust-lang.org/)
+[![License: BSL-1.1](https://img.shields.io/badge/License-BSL_1.1-blue.svg)](LICENSE.md)
+[![Model Context Protocol](https://img.shields.io/badge/MCP-2.0_Stateless-blueviolet)](https://modelcontextprotocol.io/)
 
-CodeMemoryPrime (CMP) is a small, fast tool that gives your AI coding assistant (like Claude Desktop, Cursor, or Windsurf) a long-term memory. 
-
-If you've ever had an AI forget how your project works halfway through a chat, or waste your API tokens re-reading the same files over and over, this fixes that. It indexes your codebase locally so your AI assistant can instantly look up functions, remember architectural decisions, and check documentation without getting confused.
-
----
-
-[ What makes it useful? ]
-
-- Instant Re-indexing: When you save a file, it only re-indexes what changed (usually takes less than 0.2 seconds).
-- Doesn't Lose Context: When it looks up a function, it keeps the surrounding class, struct, and import info so the AI actually understands how the code fits together.
-- No Heavy Setup: It's a single compiled binary written in Rust. No installing Node packages, Python environments, or extra background services.
-- Keeps Memory Between Sessions: Saves project facts, rules, and decisions so you don't have to re-explain your setup every time you open a new chat.
-- Works Offline: Integrates natively with local Ollama models (like qwen2.5-coder and nomic-embed-text) or local endpoints like LM Studio.
+The foundational high-performance Rust memory, graph, and AST intelligence engine powering **CodeMemoryPrime**, **CodeMemoryPrime-Pro**, **Lore Titan**, **RuleForge**, and **AIMACS**.
 
 ---
 
-[ Quick Start ]
+## 🌟 Core Architecture & Capabilities
 
-1. Build from source:
+```
++-----------------------------------------------------------------------------------+
+|                        UNIVERSAL KNOWLEDGE & MEMORY CORE                         |
++-----------------------------------------------------------------------------------+
+|  1. Sub-1ms Knowledge Graph  | SQLite Recursive CTEs, Flat Graph Edge Queries     |
+|  2. Polymorphic Profiles     | Code, Lore (Novels/Bibles), TTRPG, Agent Memory    |
+|  3. Solution & Failure Vault | SHA-256 HMAC Signatures & 60-Day Staleness TTL     |
+|  4. Decentralized Mesh Sync  | Cross-Machine Delta Packaging (`export`/`import`)  |
+|  5. Anti-Monolith Invariants | Strict LOC Audits (≤ 200 UI / ≤ 250 Logic)         |
++-----------------------------------------------------------------------------------+
+```
 
-   git clone https://github.com/rickieblevins/CodeMemoryPrime.git
-   cd CodeMemoryPrime
-   cargo build --release
+### 1. Sub-Millisecond Knowledge Graph (`knowledge_graph.rs`)
+* **Recursive CTE Graph Traversals**: Traverses complex entity subgraphs up to arbitrary depths in sub-1ms using indexed SQLite queries.
+* **Flat Edge Queries (`query_all_edges_flat`)**: Streams nodes and weighted edges directly to frontend state for **60 FPS visualizers** in Svelte 5 and Canvas/WebGL.
 
-   Your binary will be ready at ./target/release/cmp
+### 2. Polymorphic Domain Profiles (`profiles/`)
+* Seamlessly converts raw nodes into typed schemas:
+  * `DomainProfile::Code` — AST symbol relationships, imports, and caller graphs.
+  * `DomainProfile::Lore` — Characters, factions, locations, timeline events, and canon rules.
+  * `DomainProfile::Ttrpg` — Systems, mechanics, character stats, and item matrices.
+  * `DomainProfile::Agent` — Long-term agent goals, user preferences, and interaction histories.
 
-2. Plug it into your AI assistant:
+### 3. Solution Vault & Failure Vault
+* **Solution Vault**: Cryptographically stores verified algorithms with objective test pass rates and compiler exit codes ($0$).
+* **Failure Vault**: Intercepts known historical dead-ends and regressions before an agent attempts a flawed implementation.
 
-   Add CodeMemoryPrime to your client configuration file. 
-
-   For Ollama (Free & Local):
-
-   {
-     "mcpServers": {
-       "CodeMemoryPrime": {
-         "command": "/path/to/CodeMemoryPrime/target/release/cmp",
-         "args": [],
-         "env": {
-           "MCP_LLM_PROVIDER": "ollama",
-           "MCP_LLM_BASE_URL": "http://127.0.0.1:11434",
-           "MCP_LLM_GEN_MODEL": "qwen2.5-coder:7b",
-           "MCP_LLM_EMBED_MODEL": "nomic-embed-text"
-         }
-       }
-     }
-   }
-
-   Where to find your config file:
-   - Claude Desktop: ~/Library/Application Support/Claude/claude_desktop_config.json
-   - Cursor: ~/.cursor/mcp.json
-   - Windsurf: ~/.codeium/windsurf/mcp_config.json
-   - Antigravity / Gemini CLI: ~/.gemini/mcp_config.json
+### 4. Decentralized Multi-Device Mesh Sync (`mesh_sync.rs`)
+* Exports and non-destructively merges cryptographically signed delta packages (`MemoryDeltaPackage`) across **Laptop**, **Workstation**, **Home PC**, and **Mobile Devices**.
 
 ---
 
-[ Included Tools (35 Tools) ]
+## 🛠️ Module Overview
 
-CodeMemoryPrime registers tools for your AI to use automatically:
-
-- Code Search & Indexing: index_workspace, search_codebase, get_dependencies
-- Long-Term Memory: save_interaction, search_memories, consolidate_memories
-- File Management: read_file, write_file, patch_file, list_files
-- Git & Safety Checkpoints: run_command, git, create_checkpoint, restore_checkpoint, list_checkpoints
-- Refactoring & Diagnostics: explain_code, refactor_code, review_code, audit_code_hygiene, optimize_code, generate_tests, diagnose_compiler_error
-- Docs & Framework RAG: index_framework_specifications, search_framework_specifications, generate_documentation, get_documentation
-- Modularization & Analytics: modularize_code, extract_plugin, publish_plugin, recommend_plugins, log_token_usage, get_token_analytics
-- Health & System: project_health, summarize_project, configure_settings
+| Module | Purpose |
+| :--- | :--- |
+| `src/knowledge_graph.rs` | Recursive CTE subgraph traversals & flat edge queries for visualizers. |
+| `src/profiles/mod.rs` | Polymorphic entity converters (`LoreEntity`, `TtrpgEntity`, `AgentEntity`). |
+| `src/mesh_sync.rs` | Cross-device memory export, HMAC signing, and conflict-free SQLite imports. |
+| `src/solution_vault.rs` | Solution storage with objective metrics and staleness decay scores. |
+| `src/failure_vault.rs` | Dead-end recording and proactive dead-end query interception. |
+| `src/handoff.rs` | Cross-session handoff persistence and AI diary storage. |
+| `src/tailscale_roster.rs` | Real-time query and synchronization of Tailscale GPU model rosters. |
+| `src/adversarial_test.rs`| Automated generation of adversarial test harnesses. |
 
 ---
 
-[ License ]
+## 🧪 Testing
 
-CodeMemoryPrime is licensed under the Business Source License 1.1 (BSL 1.1).
+Run the full Rust test suite across all modules:
+```bash
+cargo test
+```
 
-- Free to use for: Personal projects, hobbyists, students, open-source work, and small teams (3 or fewer developers, under $100k annual revenue).
-- Commercial License: Required for larger teams or companies exceeding the free tier.
-- Converts to Apache 2.0 (open source) automatically 3 years after release.
+---
 
-Questions or commercial licenses? Check out https://www.codememoryprime.com/
+## 📜 License
+
+Licensed under the **Business Source License 1.1 (BSL 1.1)**.
+Free for personal use, hobbyists, students, open-source work, and small development teams ($\le 3$ developers AND $< \$100,000$ annual revenue). Converts to **Apache 2.0** after 3 years.
+
+(C) 2026 CodeMemoryPrime / Rickie Blevins.
