@@ -114,7 +114,8 @@ pub fn verify_gate_completion(project_name: &str, gate_id: &str) -> Result<TaskG
 
     let (task_name, gate_name, command, expected_code) = row;
 
-    let output = match Command::new("zsh").arg("-c").arg(&command).output() {
+    let shell = if cfg!(target_os = "macos") { "zsh" } else { "sh" };
+    let output = match Command::new(shell).arg("-c").arg(&command).output() {
         Ok(out) => {
             let combined = format!("{}\n{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
             let code = out.status.code().unwrap_or(-1);
@@ -212,20 +213,21 @@ mod tests {
 
     #[test]
     fn test_task_ledger_flow() {
+        let proj = format!("test_proj_{}", Uuid::new_v4());
         let gates = vec![TaskGateInput {
             gate_name: "test_cargo_check".to_string(),
             command: "echo 'Gate Passed'".to_string(),
             expected_exit_code: Some(0),
         }];
 
-        let locked = lock_task_gates("test_proj", "Test Task", gates).unwrap();
+        let locked = lock_task_gates(&proj, "Test Task", gates).unwrap();
         assert_eq!(locked.len(), 1);
 
         let gate_id = &locked[0].id;
-        let verified = verify_gate_completion("test_proj", gate_id).unwrap();
+        let verified = verify_gate_completion(&proj, gate_id).unwrap();
         assert!(verified.passed);
 
-        let summary = get_task_ledger_status("test_proj").unwrap();
+        let summary = get_task_ledger_status(&proj).unwrap();
         assert!(summary.all_gates_passed);
     }
 }
