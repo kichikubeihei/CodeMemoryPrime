@@ -94,7 +94,7 @@ pub fn list_all_tools() -> Vec<Value> {
             }),
             serde_json::json!({
                 "name": "sync_memory",
-                "description": "Performs distributed memory mesh sync (Cloudflare R2, Tailscale daemon) and refreshes the Tailscale Ollama model roster into GEMINI.md.",
+                "description": "Syncs the Tailscale Ollama model roster into GEMINI.md and exports a local memory delta snapshot. (For automated Cloudflare R2 / Tailscale daemon sync, use CodeMemoryPrime-Pro).",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -128,23 +128,6 @@ pub fn list_all_tools() -> Vec<Value> {
                         "keyword": { "type": "string", "description": "Search keyword in titles, takeaways, or proposed upgrades." },
                         "limit": { "type": "integer", "description": "Max number of records to return (default: 5)." }
                     }
-                }
-            }),
-            serde_json::json!({
-                "name": "configure_sync",
-                "description": "Configures distributed memory sync provider (Cloudflare R2, Tailscale peer daemon, or hybrid).",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "provider": { "type": "string", "enum": ["r2", "tailscale", "hybrid", "local"], "description": "Active sync provider." },
-                        "r2_account_id": { "type": "string", "description": "Cloudflare account ID." },
-                        "r2_access_key_id": { "type": "string", "description": "Cloudflare R2 Access Key ID." },
-                        "r2_secret_access_key": { "type": "string", "description": "Cloudflare R2 Secret Access Key." },
-                        "r2_bucket": { "type": "string", "description": "Cloudflare R2 bucket name." },
-                        "r2_endpoint": { "type": "string", "description": "Optional custom S3/R2 endpoint URL." },
-                        "tailscale_endpoint": { "type": "string", "description": "Tailscale daemon endpoint URL (e.g. 'http://100.102.233.128:7788')." }
-                    },
-                    "required": ["provider"]
                 }
             }),
         ];
@@ -192,23 +175,6 @@ pub fn list_all_tools() -> Vec<Value> {
                 "keyword": { "type": "string", "description": "Search keyword in titles, takeaways, or proposed upgrades." },
                 "limit": { "type": "integer", "description": "Max number of records to return (default: 5)." }
             }
-        }
-    }));
-    tools.push(serde_json::json!({
-        "name": "configure_sync",
-        "description": "Configures distributed memory sync provider (Cloudflare R2, Tailscale peer daemon, or hybrid).",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "provider": { "type": "string", "enum": ["r2", "tailscale", "hybrid", "local"], "description": "Active sync provider." },
-                "r2_account_id": { "type": "string", "description": "Cloudflare account ID." },
-                "r2_access_key_id": { "type": "string", "description": "Cloudflare R2 Access Key ID." },
-                "r2_secret_access_key": { "type": "string", "description": "Cloudflare R2 Secret Access Key." },
-                "r2_bucket": { "type": "string", "description": "Cloudflare R2 bucket name." },
-                "r2_endpoint": { "type": "string", "description": "Optional custom S3/R2 endpoint URL." },
-                "tailscale_endpoint": { "type": "string", "description": "Tailscale daemon endpoint URL (e.g. 'http://100.102.233.128:7788')." }
-            },
-            "required": ["provider"]
         }
     }));
     tools.extend(codebase::list_schemas());
@@ -312,22 +278,31 @@ pub fn run_sync_memory(endpoint: Option<&str>, _rt: &Runtime) -> String {
         }
     }
 
-    out.push_str("\n2. Executing Distributed Memory Mesh Synchronization...\n");
+    out.push_str("\n2. Exporting Local Memory Delta Package...\n");
     let db_path = crate::get_db_path();
     let _ = crate::db::init_database(&db_path);
     if let Ok(conn) = rusqlite::Connection::open(&db_path) {
-        let hostname = std::env::var("HOSTNAME").unwrap_or_else(|_| "omarchy".to_string());
-        match crate::sync_provider::sync_memory_mesh(&conn, &hostname, _rt) {
-            Ok(summary) => {
-                out.push_str(&summary);
+        let hostname = std::env::var("HOSTNAME").unwrap_or_else(|_| "localhost".to_string());
+        match crate::mesh_sync::export_memory_delta(&conn, &hostname) {
+            Ok(delta) => {
+                let sig = if delta.hmac_signature.len() >= 12 { &delta.hmac_signature[..12] } else { &delta.hmac_signature };
+                out.push_str("   [✔] Local Memory Delta Snapshot Exported:\n");
+                out.push_str(&format!("       • Device Origin: {}\n", delta.device_source));
+                out.push_str(&format!("       • Session Handoffs: {}\n", delta.session_handoffs.len()));
+                out.push_str(&format!("       • Research / Media Records: {}\n", delta.research_vault.len()));
+                out.push_str(&format!("       • Solution Vault Records: {}\n", delta.solution_vault.len()));
+                out.push_str(&format!("       • Failure Dead Ends: {}\n", delta.failure_vault.len()));
+                out.push_str(&format!("       • Knowledge Graph Nodes: {}\n", delta.knowledge_nodes.len()));
+                out.push_str(&format!("       • Cryptographic HMAC: `{}`\n", sig));
             }
             Err(e) => {
-                out.push_str(&format!("   [⚠] Sync warning: {}\n", e));
+                out.push_str(&format!("   [⚠] Delta export warning: {}\n", e));
             }
         }
     }
 
-    out.push_str("\n\n=== Sync Complete: Hive Mind is Online & Synchronized ===");
+    out.push_str("\n💡 *Pro Feature*: Automated multi-device cloud synchronization (Cloudflare R2, Tailscale daemon `cmp serve`, and continuous vector-clock CRDT sync) is exclusively available in **CodeMemoryPrime-Pro** (`cmp-pro`).");
+    out.push_str("\n\n=== Sync Complete: Local Memory Verified ===");
     out
 }
 
@@ -393,46 +368,7 @@ pub fn dispatch_tool_call(name: &str, params: &Value, rt: &Runtime) -> Option<St
             return Some("Failed to open SQLite database for research query.".to_string());
         }
         "configure_sync" => {
-            let db_path = crate::get_db_path();
-            let _ = crate::db::init_database(&db_path);
-            if let Ok(conn) = rusqlite::Connection::open(&db_path) {
-                let mut cfg = crate::sync_provider::load_sync_config(&conn);
-                if let Some(p) = params.get("provider").and_then(|s| s.as_str()) {
-                    cfg.provider = p.to_string();
-                }
-                if let Some(v) = params.get("r2_account_id").and_then(|s| s.as_str()) {
-                    cfg.r2_account_id = v.to_string();
-                }
-                if let Some(v) = params.get("r2_access_key_id").and_then(|s| s.as_str()) {
-                    cfg.r2_access_key_id = v.to_string();
-                }
-                if let Some(v) = params.get("r2_secret_access_key").and_then(|s| s.as_str()) {
-                    cfg.r2_secret_access_key = v.to_string();
-                }
-                if let Some(v) = params.get("r2_bucket").and_then(|s| s.as_str()) {
-                    cfg.r2_bucket = v.to_string();
-                }
-                if let Some(v) = params.get("r2_endpoint").and_then(|s| s.as_str()) {
-                    cfg.r2_endpoint = Some(v.to_string());
-                }
-                if let Some(v) = params.get("tailscale_endpoint").and_then(|s| s.as_str()) {
-                    cfg.tailscale_endpoint = v.to_string();
-                }
-
-                match crate::sync_provider::save_sync_config(&conn, &cfg) {
-                    Ok(_) => {
-                        return Some(format!(
-                            "=== CodeMemoryPrime Sync Configuration Saved ===\n\n- **Active Provider**: `{}`\n- **Cloudflare R2 Bucket**: `{}`\n- **R2 Account ID**: `{}`\n- **R2 Access Key**: `{}`\n- **Tailscale Endpoint**: `{}`\n\nConfiguration persisted to SQLite `system_settings` table.",
-                            cfg.provider, cfg.r2_bucket,
-                            if cfg.r2_account_id.is_empty() { "(not set)" } else { &cfg.r2_account_id },
-                            if cfg.r2_access_key_id.is_empty() { "(not set)" } else { "********" },
-                            cfg.tailscale_endpoint
-                        ));
-                    }
-                    Err(e) => return Some(format!("Failed to save sync config: {}", e)),
-                }
-            }
-            return Some("Failed to open SQLite database to save sync config.".to_string());
+            return Some("Automated multi-device cloud synchronization (Cloudflare R2, Tailscale daemon `cmp serve`) is a CodeMemoryPrime-Pro feature. Switch your MCP server binary to `cmp-pro` to configure cloud sync.".to_string());
         }
         "orchestrate_code_search" => {
             let query = params.get("query").and_then(|s| s.as_str()).unwrap_or("");
