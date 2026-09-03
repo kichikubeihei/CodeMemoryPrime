@@ -20,6 +20,30 @@ fn main() {
         }
     };
 
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() > 1 {
+        match args[1].as_str() {
+            "preflight" | "--preflight" | "cmp_preflight" => {
+                println!("{}", codememory_prime::tools::run_preflight_audit(&rt));
+                return;
+            }
+            "sync" | "--sync" | "sync_memory" | "sync-memory" => {
+                let ep = args.get(2).map(|s| s.as_str());
+                println!("{}", codememory_prime::tools::run_sync_memory(ep, &rt));
+                return;
+            }
+            "--help" | "-h" => {
+                println!("CodeMemoryPrime (CMP) - Unified Codebase Memory & Intelligence Engine");
+                println!("\nUsage:");
+                println!("  cmp                      Start MCP stdio JSON-RPC server (default)");
+                println!("  cmp preflight            Run full system preflight audit");
+                println!("  cmp sync-memory [URL]    Sync memory mesh delta and Tailscale GPU roster");
+                return;
+            }
+            _ => {}
+        }
+    }
+
     let stdin = io::stdin();
     let mut stdout = io::stdout();
     let reader = stdin.lock();
