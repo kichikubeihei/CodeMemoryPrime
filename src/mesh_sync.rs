@@ -2,6 +2,7 @@ use crate::handoff::SessionHandoff;
 use crate::solution_vault::SolutionRecord;
 use crate::failure_vault::FailureRecord;
 use crate::knowledge_graph::{KnowledgeNode, KnowledgeEdge};
+use crate::research_vault::ResearchRecord;
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -15,6 +16,8 @@ pub struct MemoryDeltaPackage {
     pub failure_vault: Vec<FailureRecord>,
     pub knowledge_nodes: Vec<KnowledgeNode>,
     pub knowledge_edges: Vec<KnowledgeEdge>,
+    #[serde(default)]
+    pub research_vault: Vec<ResearchRecord>,
     pub hmac_signature: String,
 }
 
@@ -25,6 +28,7 @@ pub struct MergeReport {
     pub dead_ends_merged: usize,
     pub nodes_merged: usize,
     pub edges_merged: usize,
+    pub research_merged: usize,
     pub status: String,
 }
 
@@ -174,12 +178,36 @@ pub fn export_memory_delta(
         }
     }
 
+    let mut research = Vec::new();
+    if let Ok(mut r_stmt) = conn.prepare(
+        "SELECT id, media_url, title, media_type, target_project, key_takeaways, proposed_upgrades, hmac_signature, created_at 
+         FROM research_vault"
+    ) {
+        let r_rows = r_stmt.query_map([], |row| {
+            Ok(ResearchRecord {
+                id: row.get(0)?,
+                media_url: row.get(1)?,
+                title: row.get(2)?,
+                media_type: row.get(3)?,
+                target_project: row.get(4)?,
+                key_takeaways: row.get(5)?,
+                proposed_upgrades: row.get(6)?,
+                hmac_signature: row.get(7)?,
+                created_at: row.get(8)?,
+            })
+        })?;
+        for r in r_rows {
+            research.push(r?);
+        }
+    }
+
     let exported_at = chrono::Utc::now().to_rfc3339();
     let mut hasher = Sha256::new();
     hasher.update(device_name.as_bytes());
     hasher.update(exported_at.as_bytes());
     hasher.update(handoffs.len().to_string().as_bytes());
     hasher.update(solutions.len().to_string().as_bytes());
+    hasher.update(research.len().to_string().as_bytes());
     let sig = format!("{:x}", hasher.finalize());
 
     Ok(MemoryDeltaPackage {
@@ -190,6 +218,7 @@ pub fn export_memory_delta(
         failure_vault: dead_ends,
         knowledge_nodes: nodes,
         knowledge_edges: edges,
+        research_vault: research,
         hmac_signature: sig,
     })
 }
@@ -285,12 +314,40 @@ pub fn import_memory_delta(
         e_count += 1;
     }
 
+    // 6. Merge Research Vault
+    let mut r_count = 0;
+    let _ = crate::research_vault::init_research_vault_tables(conn);
+    for r in &package.research_vault {
+        conn.execute(
+            "INSERT INTO research_vault (id, media_url, title, media_type, target_project, key_takeaways, proposed_upgrades, hmac_signature, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+             ON CONFLICT(id) DO UPDATE SET
+                 title=excluded.title,
+                 key_takeaways=excluded.key_takeaways,
+                 proposed_upgrades=excluded.proposed_upgrades,
+                 hmac_signature=excluded.hmac_signature",
+            params![
+                r.id,
+                r.media_url,
+                r.title,
+                r.media_type,
+                r.target_project,
+                r.key_takeaways,
+                r.proposed_upgrades,
+                r.hmac_signature,
+                r.created_at
+            ],
+        )?;
+        r_count += 1;
+    }
+
     Ok(MergeReport {
         handoffs_merged: h_count,
         solutions_merged: s_count,
         dead_ends_merged: f_count,
         nodes_merged: n_count,
         edges_merged: e_count,
+        research_merged: r_count,
         status: "SUCCESS".to_string(),
     })
 }

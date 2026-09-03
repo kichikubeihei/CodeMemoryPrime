@@ -36,6 +36,9 @@ pub mod mesh_sync;
 pub mod community_vault;
 pub mod private_vault;
 pub mod memory_delta;
+pub mod research_vault;
+pub mod sync_provider;
+pub mod sync_daemon;
 
 pub fn get_db_path() -> String {
     let base = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
