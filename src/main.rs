@@ -32,13 +32,6 @@ fn main() {
                 println!("{}", codememory_prime::tools::run_sync_memory(ep, &rt));
                 return;
             }
-            "serve" | "--serve" => {
-                let port: u16 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(7788);
-                if let Err(e) = rt.block_on(codememory_prime::sync_daemon::run_sync_daemon(port)) {
-                    eprintln!("Daemon error: {}", e);
-                }
-                return;
-            }
             "research" | "--research" => {
                 let keyword = args.get(2).map(|s| s.as_str()).unwrap_or("");
                 let db_path = codememory_prime::get_db_path();
@@ -67,9 +60,9 @@ fn main() {
                 println!("\nUsage:");
                 println!("  cmp                      Start MCP stdio JSON-RPC server (default)");
                 println!("  cmp preflight            Run full system preflight audit");
-                println!("  cmp sync-memory [URL]    Sync memory mesh delta across Cloudflare R2 / Tailscale");
-                println!("  cmp serve [PORT]         Start peer-to-peer Tailscale memory sync daemon (default: 7788)");
+                println!("  cmp sync-memory [URL]    Sync GPU roster and export local delta snapshot");
                 println!("  cmp research [KEYWORD]   Query recorded video analyses & architecture upgrades");
+                println!("\nNote: Automated multi-device cloud sync (Cloudflare R2, Tailscale daemon) is in CodeMemoryPrime-Pro (`cmp-pro`).");
                 return;
             }
             _ => {}
