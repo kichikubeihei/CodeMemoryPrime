@@ -94,12 +94,57 @@ pub fn list_all_tools() -> Vec<Value> {
             }),
             serde_json::json!({
                 "name": "sync_memory",
-                "description": "Performs decentralized memory mesh sync and refreshes the Tailscale Ollama model roster into GEMINI.md.",
+                "description": "Performs distributed memory mesh sync (Cloudflare R2, Tailscale daemon) and refreshes the Tailscale Ollama model roster into GEMINI.md.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "endpoint": { "type": "string", "description": "Optional custom Ollama Tailscale endpoint URL." }
                     }
+                }
+            }),
+            serde_json::json!({
+                "name": "record_research",
+                "description": "Records and indexes YouTube video analysis, technical research papers, or architecture upgrade blueprints into the persistent cryptographic Research Vault.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "media_url": { "type": "string", "description": "URL of the YouTube video, paper, or article." },
+                        "title": { "type": "string", "description": "Title of the video or research material." },
+                        "media_type": { "type": "string", "enum": ["youtube_video", "technical_paper", "web_article", "repo"], "description": "Type of media." },
+                        "target_project": { "type": "string", "description": "Target project (e.g. 'CodeMemoryPrime', 'Altalune', 'Lore Titan')." },
+                        "key_takeaways": { "type": "string", "description": "Core concepts, architecture ideas, or technical summaries." },
+                        "proposed_upgrades": { "type": "string", "description": "Actionable code upgrades and feature backlog items derived from this research." }
+                    },
+                    "required": ["media_url", "title", "key_takeaways", "proposed_upgrades"]
+                }
+            }),
+            serde_json::json!({
+                "name": "query_research",
+                "description": "Queries recorded YouTube video analyses, research papers, and technical upgrade notes across all synced projects.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "target_project": { "type": "string", "description": "Filter by target project or 'all'." },
+                        "keyword": { "type": "string", "description": "Search keyword in titles, takeaways, or proposed upgrades." },
+                        "limit": { "type": "integer", "description": "Max number of records to return (default: 5)." }
+                    }
+                }
+            }),
+            serde_json::json!({
+                "name": "configure_sync",
+                "description": "Configures distributed memory sync provider (Cloudflare R2, Tailscale peer daemon, or hybrid).",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "provider": { "type": "string", "enum": ["r2", "tailscale", "hybrid", "local"], "description": "Active sync provider." },
+                        "r2_account_id": { "type": "string", "description": "Cloudflare account ID." },
+                        "r2_access_key_id": { "type": "string", "description": "Cloudflare R2 Access Key ID." },
+                        "r2_secret_access_key": { "type": "string", "description": "Cloudflare R2 Secret Access Key." },
+                        "r2_bucket": { "type": "string", "description": "Cloudflare R2 bucket name." },
+                        "r2_endpoint": { "type": "string", "description": "Optional custom S3/R2 endpoint URL." },
+                        "tailscale_endpoint": { "type": "string", "description": "Tailscale daemon endpoint URL (e.g. 'http://100.102.233.128:7788')." }
+                    },
+                    "required": ["provider"]
                 }
             }),
         ];
@@ -113,12 +158,57 @@ pub fn list_all_tools() -> Vec<Value> {
     }));
     tools.push(serde_json::json!({
         "name": "sync_memory",
-        "description": "Performs decentralized memory mesh sync and refreshes the Tailscale Ollama model roster into GEMINI.md.",
+        "description": "Performs distributed memory mesh sync (Cloudflare R2, Tailscale daemon) and refreshes the Tailscale Ollama model roster into GEMINI.md.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "endpoint": { "type": "string", "description": "Optional custom Ollama Tailscale endpoint URL." }
             }
+        }
+    }));
+    tools.push(serde_json::json!({
+        "name": "record_research",
+        "description": "Records and indexes YouTube video analysis, technical research papers, or architecture upgrade blueprints into the persistent cryptographic Research Vault.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "media_url": { "type": "string", "description": "URL of the YouTube video, paper, or article." },
+                "title": { "type": "string", "description": "Title of the video or research material." },
+                "media_type": { "type": "string", "enum": ["youtube_video", "technical_paper", "web_article", "repo"], "description": "Type of media." },
+                "target_project": { "type": "string", "description": "Target project (e.g. 'CodeMemoryPrime', 'Altalune', 'Lore Titan')." },
+                "key_takeaways": { "type": "string", "description": "Core concepts, architecture ideas, or technical summaries." },
+                "proposed_upgrades": { "type": "string", "description": "Actionable code upgrades and feature backlog items derived from this research." }
+            },
+            "required": ["media_url", "title", "key_takeaways", "proposed_upgrades"]
+        }
+    }));
+    tools.push(serde_json::json!({
+        "name": "query_research",
+        "description": "Queries recorded YouTube video analyses, research papers, and technical upgrade notes across all synced projects.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "target_project": { "type": "string", "description": "Filter by target project or 'all'." },
+                "keyword": { "type": "string", "description": "Search keyword in titles, takeaways, or proposed upgrades." },
+                "limit": { "type": "integer", "description": "Max number of records to return (default: 5)." }
+            }
+        }
+    }));
+    tools.push(serde_json::json!({
+        "name": "configure_sync",
+        "description": "Configures distributed memory sync provider (Cloudflare R2, Tailscale peer daemon, or hybrid).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "provider": { "type": "string", "enum": ["r2", "tailscale", "hybrid", "local"], "description": "Active sync provider." },
+                "r2_account_id": { "type": "string", "description": "Cloudflare account ID." },
+                "r2_access_key_id": { "type": "string", "description": "Cloudflare R2 Access Key ID." },
+                "r2_secret_access_key": { "type": "string", "description": "Cloudflare R2 Secret Access Key." },
+                "r2_bucket": { "type": "string", "description": "Cloudflare R2 bucket name." },
+                "r2_endpoint": { "type": "string", "description": "Optional custom S3/R2 endpoint URL." },
+                "tailscale_endpoint": { "type": "string", "description": "Tailscale daemon endpoint URL (e.g. 'http://100.102.233.128:7788')." }
+            },
+            "required": ["provider"]
         }
     }));
     tools.extend(codebase::list_schemas());
@@ -222,30 +312,22 @@ pub fn run_sync_memory(endpoint: Option<&str>, _rt: &Runtime) -> String {
         }
     }
 
-    out.push_str("\n2. Exporting Decentralized Memory Mesh Delta Package...\n");
+    out.push_str("\n2. Executing Distributed Memory Mesh Synchronization...\n");
     let db_path = crate::get_db_path();
     let _ = crate::db::init_database(&db_path);
     if let Ok(conn) = rusqlite::Connection::open(&db_path) {
         let hostname = std::env::var("HOSTNAME").unwrap_or_else(|_| "omarchy".to_string());
-        match crate::mesh_sync::export_memory_delta(&conn, &hostname) {
-            Ok(delta) => {
-                let sig = if delta.hmac_signature.len() >= 12 { &delta.hmac_signature[..12] } else { &delta.hmac_signature };
-                out.push_str("   [✔] Memory Delta Package Exported:\n");
-                out.push_str(&format!("       - Device Origin: {}\n", delta.device_source));
-                out.push_str(&format!("       - Session Handoffs: {}\n", delta.session_handoffs.len()));
-                out.push_str(&format!("       - Solution Vault Records: {}\n", delta.solution_vault.len()));
-                out.push_str(&format!("       - Failure Dead Ends: {}\n", delta.failure_vault.len()));
-                out.push_str(&format!("       - Knowledge Graph Nodes: {}\n", delta.knowledge_nodes.len()));
-                out.push_str(&format!("       - Knowledge Graph Edges: {}\n", delta.knowledge_edges.len()));
-                out.push_str(&format!("       - HMAC Signature: `{}`\n", sig));
+        match crate::sync_provider::sync_memory_mesh(&conn, &hostname, _rt) {
+            Ok(summary) => {
+                out.push_str(&summary);
             }
             Err(e) => {
-                out.push_str(&format!("   [⚠] Delta export warning: {}\n", e));
+                out.push_str(&format!("   [⚠] Sync warning: {}\n", e));
             }
         }
     }
 
-    out.push_str("\n=== Sync Complete: Hive Mind is Online & Synchronized ===");
+    out.push_str("\n\n=== Sync Complete: Hive Mind is Online & Synchronized ===");
     out
 }
 
@@ -257,6 +339,100 @@ pub fn dispatch_tool_call(name: &str, params: &Value, rt: &Runtime) -> Option<St
         "sync_memory" | "orchestrate_sync_memory" => {
             let ep = params.get("endpoint").and_then(|s| s.as_str());
             return Some(run_sync_memory(ep, rt));
+        }
+        "record_research" | "save_research" => {
+            let media_url = params.get("media_url").and_then(|s| s.as_str()).unwrap_or("");
+            let title = params.get("title").and_then(|s| s.as_str()).unwrap_or("");
+            let media_type = params.get("media_type").and_then(|s| s.as_str()).unwrap_or("youtube_video");
+            let target_project = params.get("target_project").and_then(|s| s.as_str()).unwrap_or("CodeMemoryPrime");
+            let key_takeaways = params.get("key_takeaways").and_then(|s| s.as_str()).unwrap_or("");
+            let proposed_upgrades = params.get("proposed_upgrades").and_then(|s| s.as_str()).unwrap_or("");
+
+            let db_path = crate::get_db_path();
+            let _ = crate::db::init_database(&db_path);
+            if let Ok(conn) = rusqlite::Connection::open(&db_path) {
+                match crate::research_vault::record_research(&conn, media_url, title, media_type, target_project, key_takeaways, proposed_upgrades) {
+                    Ok(rec) => {
+                        let short_hmac = if rec.hmac_signature.len() >= 12 { &rec.hmac_signature[..12] } else { &rec.hmac_signature };
+                        return Some(format!(
+                            "=== Research Vault Entry Recorded ===\n\n- **ID**: `{}`\n- **Title**: {}\n- **URL**: {}\n- **Type**: {}\n- **Project**: {}\n- **HMAC Anti-Tamper Signature**: `{}`\n\n### Key Takeaways:\n{}\n\n### Proposed Upgrades:\n{}\n\n*(Ready to auto-sync across distributed mesh)*",
+                            rec.id, rec.title, rec.media_url, rec.media_type, rec.target_project, short_hmac, rec.key_takeaways, rec.proposed_upgrades
+                        ));
+                    }
+                    Err(e) => return Some(format!("Failed to record research: {}", e)),
+                }
+            }
+            return Some("Failed to open SQLite database for research recording.".to_string());
+        }
+        "query_research" | "get_latest_research" => {
+            let proj = params.get("target_project").and_then(|s| s.as_str()).unwrap_or("all");
+            let keyword = params.get("keyword").and_then(|s| s.as_str()).unwrap_or("");
+            let limit = params.get("limit").and_then(|s| s.as_u64()).unwrap_or(5) as usize;
+
+            let db_path = crate::get_db_path();
+            let _ = crate::db::init_database(&db_path);
+            if let Ok(conn) = rusqlite::Connection::open(&db_path) {
+                match crate::research_vault::query_research(&conn, proj, keyword, limit) {
+                    Ok(records) => {
+                        if records.is_empty() {
+                            return Some(format!("No research or video analyses found for project '{}' (keyword: '{}').", proj, keyword));
+                        }
+                        let mut out = format!("=== Research & Video Analysis Records ({}) ===\n\n", records.len());
+                        for r in records {
+                            let short_hmac = if r.hmac_signature.len() >= 12 { &r.hmac_signature[..12] } else { &r.hmac_signature };
+                            out.push_str(&format!(
+                                "#### [{}]({})\n- **Project**: `{}` | **Type**: `{}` | **Date**: {}\n- **HMAC Signature**: `{}`\n\n**Key Takeaways**:\n{}\n\n**Proposed Upgrades**:\n{}\n\n---\n",
+                                r.title, r.media_url, r.target_project, r.media_type, r.created_at, short_hmac, r.key_takeaways, r.proposed_upgrades
+                            ));
+                        }
+                        return Some(out);
+                    }
+                    Err(e) => return Some(format!("Failed to query research vault: {}", e)),
+                }
+            }
+            return Some("Failed to open SQLite database for research query.".to_string());
+        }
+        "configure_sync" => {
+            let db_path = crate::get_db_path();
+            let _ = crate::db::init_database(&db_path);
+            if let Ok(conn) = rusqlite::Connection::open(&db_path) {
+                let mut cfg = crate::sync_provider::load_sync_config(&conn);
+                if let Some(p) = params.get("provider").and_then(|s| s.as_str()) {
+                    cfg.provider = p.to_string();
+                }
+                if let Some(v) = params.get("r2_account_id").and_then(|s| s.as_str()) {
+                    cfg.r2_account_id = v.to_string();
+                }
+                if let Some(v) = params.get("r2_access_key_id").and_then(|s| s.as_str()) {
+                    cfg.r2_access_key_id = v.to_string();
+                }
+                if let Some(v) = params.get("r2_secret_access_key").and_then(|s| s.as_str()) {
+                    cfg.r2_secret_access_key = v.to_string();
+                }
+                if let Some(v) = params.get("r2_bucket").and_then(|s| s.as_str()) {
+                    cfg.r2_bucket = v.to_string();
+                }
+                if let Some(v) = params.get("r2_endpoint").and_then(|s| s.as_str()) {
+                    cfg.r2_endpoint = Some(v.to_string());
+                }
+                if let Some(v) = params.get("tailscale_endpoint").and_then(|s| s.as_str()) {
+                    cfg.tailscale_endpoint = v.to_string();
+                }
+
+                match crate::sync_provider::save_sync_config(&conn, &cfg) {
+                    Ok(_) => {
+                        return Some(format!(
+                            "=== CodeMemoryPrime Sync Configuration Saved ===\n\n- **Active Provider**: `{}`\n- **Cloudflare R2 Bucket**: `{}`\n- **R2 Account ID**: `{}`\n- **R2 Access Key**: `{}`\n- **Tailscale Endpoint**: `{}`\n\nConfiguration persisted to SQLite `system_settings` table.",
+                            cfg.provider, cfg.r2_bucket,
+                            if cfg.r2_account_id.is_empty() { "(not set)" } else { &cfg.r2_account_id },
+                            if cfg.r2_access_key_id.is_empty() { "(not set)" } else { "********" },
+                            cfg.tailscale_endpoint
+                        ));
+                    }
+                    Err(e) => return Some(format!("Failed to save sync config: {}", e)),
+                }
+            }
+            return Some("Failed to open SQLite database to save sync config.".to_string());
         }
         "orchestrate_code_search" => {
             let query = params.get("query").and_then(|s| s.as_str()).unwrap_or("");
