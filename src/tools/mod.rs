@@ -420,6 +420,21 @@ pub fn dispatch_tool_call(name: &str, params: &Value, rt: &Runtime) -> Option<St
                         Err(e) => format!("Failed to load handoff: {}", e),
                     });
                 }
+                "save_handoff" => {
+                    let task_goal = params.get("task_goal").and_then(|s| s.as_str()).unwrap_or("");
+                    let handoff = crate::handoff::SessionHandoff {
+                        project_name: proj.to_string(),
+                        task_goal: task_goal.to_string(),
+                        completed_steps: vec!["Orchestrated via CMP".to_string()],
+                        open_questions: Vec::new(),
+                        active_files: Vec::new(),
+                        timestamp: chrono::Utc::now().to_rfc3339(),
+                    };
+                    return Some(match crate::handoff::save_session_handoff(&handoff) {
+                        Ok(_) => format!("Session handoff saved successfully for '{}'.", proj),
+                        Err(e) => format!("Failed to save handoff: {}", e),
+                    });
+                }
                 "clean_stale" => {
                     let cleaned = crate::doc_cleaner::clean_stale_context(".", proj);
                     return Some(match cleaned {
