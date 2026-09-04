@@ -242,7 +242,8 @@ pub fn import_memory_delta(
                  completed_steps=excluded.completed_steps,
                  open_questions=excluded.open_questions,
                  active_files=excluded.active_files,
-                 timestamp=excluded.timestamp",
+                 timestamp=excluded.timestamp
+             WHERE excluded.timestamp > session_handoffs.timestamp",
             params![h.project_name, h.task_goal, completed_json, questions_json, files_json, h.timestamp],
         )?;
         h_count += 1;
