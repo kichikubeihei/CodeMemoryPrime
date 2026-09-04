@@ -2,6 +2,14 @@ use regex::Regex;
 use std::sync::OnceLock;
 
 static ERROR_LINE_REGEX: OnceLock<Regex> = OnceLock::new();
+static ANSI_REGEX: OnceLock<Regex> = OnceLock::new();
+
+pub fn strip_ansi_codes(input: &str) -> String {
+    let re = ANSI_REGEX.get_or_init(|| {
+        Regex::new(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])").unwrap()
+    });
+    re.replace_all(input, "").to_string()
+}
 
 fn get_error_line_regex() -> &'static Regex {
     ERROR_LINE_REGEX.get_or_init(|| {
@@ -9,13 +17,14 @@ fn get_error_line_regex() -> &'static Regex {
     })
 }
 
-/// Bounds long terminal output by keeping command headers and critical error tails, collapsing repetitive passing lines.
+/// Bounds long terminal output by stripping ANSI escapes and collapsing repetitive passing lines.
 pub fn bound_terminal_output(input: &str, max_bytes: usize) -> String {
-    if input.len() <= max_bytes {
-        return input.to_string();
+    let clean_input = strip_ansi_codes(input);
+    if clean_input.len() <= max_bytes && clean_input.lines().count() <= 25 {
+        return clean_input;
     }
 
-    let lines: Vec<&str> = input.lines().collect();
+    let lines: Vec<&str> = clean_input.lines().collect();
     if lines.len() <= 25 {
         return input.to_string();
     }
