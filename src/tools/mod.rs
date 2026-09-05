@@ -415,13 +415,22 @@ pub fn dispatch_tool_call(name: &str, params: &Value, rt: &Runtime) -> Option<St
                 "load_handoff" => {
                     let handoff = crate::handoff::load_session_handoff(proj);
                     return Some(match handoff {
-                        Ok(Some(h)) => format!("=== Active Handoff for '{}' ===\n- Goal: {}\n- Active Files: {}\n- Open Questions: {}\n- Steps Completed: {}", h.project_name, h.task_goal, h.active_files.join(", "), h.open_questions.join(", "), h.completed_steps.join("\n  * ")),
+                        Ok(Some(h)) => format!("=== Active Handoff for '{}' ===\n- Goal: {}\n- Active Files: {}\n- Open Questions: {}\n- Prohibited Repetition: {}\n- Steps Completed: {}", h.project_name, h.task_goal, h.active_files.join(", "), h.open_questions.join(", "), if h.prohibited_repetition.is_empty() { "None".to_string() } else { h.prohibited_repetition.join("; ") }, h.completed_steps.join("\n  * ")),
                         Ok(None) => format!("No active session handoff found for '{}'.", proj),
                         Err(e) => format!("Failed to load handoff: {}", e),
                     });
                 }
                 "save_handoff" => {
                     let task_goal = params.get("task_goal").and_then(|s| s.as_str()).unwrap_or("");
+                    let prohibited_val = params.get("prohibited_repetition").cloned().unwrap_or(serde_json::json!([]));
+                    let mut prohibited = Vec::new();
+                    if let Some(arr) = prohibited_val.as_array() {
+                        for p in arr {
+                            if let Some(s) = p.as_str() {
+                                prohibited.push(s.to_string());
+                            }
+                        }
+                    }
                     let handoff = crate::handoff::SessionHandoff {
                         project_name: proj.to_string(),
                         task_goal: task_goal.to_string(),
@@ -429,6 +438,7 @@ pub fn dispatch_tool_call(name: &str, params: &Value, rt: &Runtime) -> Option<St
                         open_questions: Vec::new(),
                         active_files: Vec::new(),
                         timestamp: chrono::Utc::now().to_rfc3339(),
+                        prohibited_repetition: prohibited,
                     };
                     return Some(match crate::handoff::save_session_handoff(&handoff) {
                         Ok(_) => format!("Session handoff saved successfully for '{}'.", proj),

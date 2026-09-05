@@ -38,14 +38,16 @@ pub fn export_memory_delta(
 ) -> Result<MemoryDeltaPackage> {
     // 1. Export Session Handoffs
     let mut handoffs = Vec::new();
+    let _ = conn.execute("ALTER TABLE session_handoffs ADD COLUMN prohibited_repetition TEXT", []);
     let mut h_stmt = conn.prepare(
-        "SELECT project_name, task_goal, completed_steps, open_questions, active_files, timestamp 
+        "SELECT project_name, task_goal, completed_steps, open_questions, active_files, timestamp, prohibited_repetition 
          FROM session_handoffs"
     )?;
     let h_rows = h_stmt.query_map([], |row| {
         let completed_str: String = row.get(2)?;
         let questions_str: String = row.get(3)?;
         let files_str: String = row.get(4)?;
+        let prohibited_str: Option<String> = row.get(6).ok();
         Ok(SessionHandoff {
             project_name: row.get(0)?,
             task_goal: row.get(1)?,
@@ -53,6 +55,7 @@ pub fn export_memory_delta(
             open_questions: serde_json::from_str(&questions_str).unwrap_or_default(),
             active_files: serde_json::from_str(&files_str).unwrap_or_default(),
             timestamp: row.get(5)?,
+            prohibited_repetition: prohibited_str.and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default(),
         })
     })?;
     for r in h_rows {
@@ -135,11 +138,13 @@ pub fn export_memory_delta(
 
     // 4. Export Knowledge Graph Nodes & Edges
     let mut nodes = Vec::new();
+    let _ = conn.execute("ALTER TABLE knowledge_nodes ADD COLUMN evidence_tier TEXT DEFAULT 'verified'", []);
     if let Ok(mut n_stmt) = conn.prepare(
-        "SELECT id, profile, entity_type, name, content, metadata_json, created_at, updated_at 
+        "SELECT id, profile, entity_type, name, content, metadata_json, created_at, updated_at, evidence_tier 
          FROM knowledge_nodes"
     ) {
         let n_rows = n_stmt.query_map([], |row| {
+            let tier: Option<String> = row.get(8).ok();
             Ok(KnowledgeNode {
                 id: row.get(0)?,
                 profile: row.get(1)?,
@@ -149,6 +154,7 @@ pub fn export_memory_delta(
                 metadata_json: row.get(5)?,
                 created_at: row.get(6)?,
                 updated_at: row.get(7)?,
+                evidence_tier: tier.unwrap_or_else(|| "verified".to_string()),
             })
         })?;
         for r in n_rows {
@@ -229,22 +235,25 @@ pub fn import_memory_delta(
 ) -> Result<MergeReport> {
     // 1. Merge Handoffs
     let mut h_count = 0;
+    let _ = conn.execute("ALTER TABLE session_handoffs ADD COLUMN prohibited_repetition TEXT", []);
     for h in &package.session_handoffs {
         let completed_json = serde_json::to_string(&h.completed_steps).unwrap_or_default();
         let questions_json = serde_json::to_string(&h.open_questions).unwrap_or_default();
         let files_json = serde_json::to_string(&h.active_files).unwrap_or_default();
+        let prohibited_json = serde_json::to_string(&h.prohibited_repetition).unwrap_or_default();
 
         conn.execute(
-            "INSERT INTO session_handoffs (project_name, task_goal, completed_steps, open_questions, active_files, timestamp)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            "INSERT INTO session_handoffs (project_name, task_goal, completed_steps, open_questions, active_files, timestamp, prohibited_repetition)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
              ON CONFLICT(project_name) DO UPDATE SET
                  task_goal=excluded.task_goal,
                  completed_steps=excluded.completed_steps,
                  open_questions=excluded.open_questions,
                  active_files=excluded.active_files,
-                 timestamp=excluded.timestamp
+                 timestamp=excluded.timestamp,
+                 prohibited_repetition=excluded.prohibited_repetition
              WHERE excluded.timestamp > session_handoffs.timestamp",
-            params![h.project_name, h.task_goal, completed_json, questions_json, files_json, h.timestamp],
+            params![h.project_name, h.task_goal, completed_json, questions_json, files_json, h.timestamp, prohibited_json],
         )?;
         h_count += 1;
     }
