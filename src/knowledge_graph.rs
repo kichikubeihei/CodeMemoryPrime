@@ -1,6 +1,10 @@
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 
+fn default_evidence_tier() -> String {
+    "verified".to_string()
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct KnowledgeNode {
     pub id: String,
@@ -11,6 +15,8 @@ pub struct KnowledgeNode {
     pub metadata_json: String, // Rich JSON metadata
     pub created_at: String,
     pub updated_at: String,
+    #[serde(default = "default_evidence_tier")]
+    pub evidence_tier: String, // "verified", "axiom", "inference", "historical", "hypothesis"
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -52,10 +58,12 @@ pub fn init_knowledge_graph_tables(conn: &Connection) -> Result<()> {
             content TEXT NOT NULL,
             metadata_json TEXT NOT NULL,
             created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
+            updated_at TEXT NOT NULL,
+            evidence_tier TEXT DEFAULT 'verified'
         )",
         [],
     )?;
+    let _ = conn.execute("ALTER TABLE knowledge_nodes ADD COLUMN evidence_tier TEXT DEFAULT 'verified'", []);
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_knodes_profile_type 
@@ -101,14 +109,17 @@ pub fn init_knowledge_graph_tables(conn: &Connection) -> Result<()> {
 }
 
 pub fn insert_knowledge_node(conn: &Connection, node: &KnowledgeNode) -> Result<String> {
+    let _ = conn.execute("ALTER TABLE knowledge_nodes ADD COLUMN evidence_tier TEXT DEFAULT 'verified'", []);
+    let tier = if node.evidence_tier.is_empty() { "verified" } else { &node.evidence_tier };
     conn.execute(
-        "INSERT INTO knowledge_nodes (id, profile, entity_type, name, content, metadata_json, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+        "INSERT INTO knowledge_nodes (id, profile, entity_type, name, content, metadata_json, created_at, updated_at, evidence_tier)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
          ON CONFLICT(id) DO UPDATE SET
              name=excluded.name,
              content=excluded.content,
              metadata_json=excluded.metadata_json,
-             updated_at=excluded.updated_at",
+             updated_at=excluded.updated_at,
+             evidence_tier=excluded.evidence_tier",
         params![
             node.id,
             node.profile,
@@ -117,7 +128,8 @@ pub fn insert_knowledge_node(conn: &Connection, node: &KnowledgeNode) -> Result<
             node.content,
             node.metadata_json,
             node.created_at,
-            node.updated_at
+            node.updated_at,
+            tier
         ],
     )?;
     Ok(node.id.clone())
@@ -146,14 +158,16 @@ pub fn insert_knowledge_edge(conn: &Connection, edge: &KnowledgeEdge) -> Result<
 }
 
 pub fn query_nodes_by_type(conn: &Connection, profile: &str, entity_type: &str) -> Result<Vec<KnowledgeNode>> {
+    let _ = conn.execute("ALTER TABLE knowledge_nodes ADD COLUMN evidence_tier TEXT DEFAULT 'verified'", []);
     let mut stmt = conn.prepare(
-        "SELECT id, profile, entity_type, name, content, metadata_json, created_at, updated_at
+        "SELECT id, profile, entity_type, name, content, metadata_json, created_at, updated_at, evidence_tier
          FROM knowledge_nodes
          WHERE profile = ?1 AND entity_type = ?2
          ORDER BY name ASC",
     )?;
 
     let rows = stmt.query_map(params![profile, entity_type], |row| {
+        let tier: Option<String> = row.get(8).ok();
         Ok(KnowledgeNode {
             id: row.get(0)?,
             profile: row.get(1)?,
@@ -163,6 +177,7 @@ pub fn query_nodes_by_type(conn: &Connection, profile: &str, entity_type: &str) 
             metadata_json: row.get(5)?,
             created_at: row.get(6)?,
             updated_at: row.get(7)?,
+            evidence_tier: tier.unwrap_or_else(|| "verified".to_string()),
         })
     })?;
 
@@ -174,13 +189,15 @@ pub fn query_nodes_by_type(conn: &Connection, profile: &str, entity_type: &str) 
 }
 
 pub fn query_node_by_id(conn: &Connection, id: &str) -> Result<Option<KnowledgeNode>> {
+    let _ = conn.execute("ALTER TABLE knowledge_nodes ADD COLUMN evidence_tier TEXT DEFAULT 'verified'", []);
     let mut stmt = conn.prepare(
-        "SELECT id, profile, entity_type, name, content, metadata_json, created_at, updated_at
+        "SELECT id, profile, entity_type, name, content, metadata_json, created_at, updated_at, evidence_tier
          FROM knowledge_nodes
          WHERE id = ?1",
     )?;
 
     let mut rows = stmt.query_map(params![id], |row| {
+        let tier: Option<String> = row.get(8).ok();
         Ok(KnowledgeNode {
             id: row.get(0)?,
             profile: row.get(1)?,
@@ -190,6 +207,7 @@ pub fn query_node_by_id(conn: &Connection, id: &str) -> Result<Option<KnowledgeN
             metadata_json: row.get(5)?,
             created_at: row.get(6)?,
             updated_at: row.get(7)?,
+            evidence_tier: tier.unwrap_or_else(|| "verified".to_string()),
         })
     })?;
 
@@ -245,12 +263,13 @@ pub fn query_subgraph(conn: &Connection, root_id: &str, max_depth: u32) -> Resul
             JOIN traverse t ON e.source_id = t.node_id
             WHERE t.depth < ?2
         )
-        SELECT DISTINCT n.id, n.profile, n.entity_type, n.name, n.content, n.metadata_json, n.created_at, n.updated_at
+        SELECT DISTINCT n.id, n.profile, n.entity_type, n.name, n.content, n.metadata_json, n.created_at, n.updated_at, n.evidence_tier
         FROM knowledge_nodes n
         JOIN traverse t ON n.id = t.node_id",
     )?;
 
     let node_rows = stmt.query_map(params![root_id, max_depth], |row| {
+        let tier: Option<String> = row.get(8).ok();
         Ok(KnowledgeNode {
             id: row.get(0)?,
             profile: row.get(1)?,
@@ -260,6 +279,7 @@ pub fn query_subgraph(conn: &Connection, root_id: &str, max_depth: u32) -> Resul
             metadata_json: row.get(5)?,
             created_at: row.get(6)?,
             updated_at: row.get(7)?,
+            evidence_tier: tier.unwrap_or_else(|| "verified".to_string()),
         })
     })?;
 
@@ -335,6 +355,7 @@ mod tests {
             metadata_json: r#"{"race":"Human","title":"King of Gondor"}"#.to_string(),
             created_at: "2026-08-31T00:00:00Z".to_string(),
             updated_at: "2026-08-31T00:00:00Z".to_string(),
+            evidence_tier: "axiom".to_string(),
         };
         let arwen = KnowledgeNode {
             id: "char_arwen".to_string(),
@@ -345,6 +366,7 @@ mod tests {
             metadata_json: r#"{"race":"Half-elven"}"#.to_string(),
             created_at: "2026-08-31T00:00:00Z".to_string(),
             updated_at: "2026-08-31T00:00:00Z".to_string(),
+            evidence_tier: "axiom".to_string(),
         };
 
         insert_knowledge_node(&conn, &aragorn).unwrap();

@@ -49,6 +49,7 @@ impl LoreEntity {
             metadata_json: metadata_val.to_string(),
             created_at: chrono::Utc::now().to_rfc3339(),
             updated_at: chrono::Utc::now().to_rfc3339(),
+            evidence_tier: "axiom".to_string(),
         }
     }
 }
@@ -80,6 +81,7 @@ impl TtrpgEntity {
             metadata_json: metadata_val.to_string(),
             created_at: chrono::Utc::now().to_rfc3339(),
             updated_at: chrono::Utc::now().to_rfc3339(),
+            evidence_tier: "axiom".to_string(),
         }
     }
 }
@@ -112,6 +114,7 @@ impl AgentEntity {
             metadata_json: metadata_val.to_string(),
             created_at: chrono::Utc::now().to_rfc3339(),
             updated_at: chrono::Utc::now().to_rfc3339(),
+            evidence_tier: "historical".to_string(),
         }
     }
 }
