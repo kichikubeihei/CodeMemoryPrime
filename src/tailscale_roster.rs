@@ -99,7 +99,7 @@ pub fn sync_tailscale_model_roster(
         else if n.contains("llama3.3") || n.contains("llama3") && n.contains("70b") { "High-complexity architecture, system design" }
         else if n.contains("vision") { "UI screenshots, image-to-code" }
         else if n.contains("gemma4") || n.contains("gemma") && n.contains("27b") { "Multimodal UI review, vision + code" }
-        else if n.contains("muse") || n.contains("glimmer") { "Creative writing, Altalune novelist content" }
+        else if n.contains("muse") || n.contains("glimmer") { "Documentation writing, technical copywriting" }
         else if n.contains("llama") { "General reasoning and instruction following" }
         else { "General purpose inference" }
     };

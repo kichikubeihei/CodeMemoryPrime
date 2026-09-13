@@ -111,7 +111,7 @@ pub fn list_all_tools() -> Vec<Value> {
                         "media_url": { "type": "string", "description": "URL of the YouTube video, paper, or article." },
                         "title": { "type": "string", "description": "Title of the video or research material." },
                         "media_type": { "type": "string", "enum": ["youtube_video", "technical_paper", "web_article", "repo"], "description": "Type of media." },
-                        "target_project": { "type": "string", "description": "Target project (e.g. 'CodeMemoryPrime', 'Altalune', 'Lore Titan')." },
+                        "target_project": { "type": "string", "description": "Target project (e.g. 'CodeMemoryPrime-Pro', 'AlgorithmEngine', 'WebApp')." },
                         "key_takeaways": { "type": "string", "description": "Core concepts, architecture ideas, or technical summaries." },
                         "proposed_upgrades": { "type": "string", "description": "Actionable code upgrades and feature backlog items derived from this research." }
                     },
@@ -158,7 +158,7 @@ pub fn list_all_tools() -> Vec<Value> {
                 "media_url": { "type": "string", "description": "URL of the YouTube video, paper, or article." },
                 "title": { "type": "string", "description": "Title of the video or research material." },
                 "media_type": { "type": "string", "enum": ["youtube_video", "technical_paper", "web_article", "repo"], "description": "Type of media." },
-                "target_project": { "type": "string", "description": "Target project (e.g. 'CodeMemoryPrime', 'Altalune', 'Lore Titan')." },
+                "target_project": { "type": "string", "description": "Target project (e.g. 'CodeMemoryPrime-Pro', 'AlgorithmEngine', 'WebApp')." },
                 "key_takeaways": { "type": "string", "description": "Core concepts, architecture ideas, or technical summaries." },
                 "proposed_upgrades": { "type": "string", "description": "Actionable code upgrades and feature backlog items derived from this research." }
             },

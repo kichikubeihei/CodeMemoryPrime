@@ -273,6 +273,25 @@ pub fn init_database(db_path: &str) -> Result<()> {
     // 14. Universal Knowledge Graph Tables (Nodes & Edges)
     crate::knowledge_graph::init_knowledge_graph_tables(&conn)?;
 
+    // 15. Session Observations table (Granular Tool & File Action Tracking)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS session_observations (
+            id TEXT PRIMARY KEY,
+            session_id TEXT,
+            project_name TEXT NOT NULL,
+            tool_name TEXT NOT NULL,
+            target_file TEXT,
+            summary TEXT NOT NULL,
+            status TEXT NOT NULL,
+            details TEXT,
+            timestamp TEXT NOT NULL
+        )",
+        [],
+    )?;
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_obs_project ON session_observations(project_name)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_obs_file ON session_observations(target_file)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_obs_time ON session_observations(timestamp)", []);
+
     Ok(())
 }
 

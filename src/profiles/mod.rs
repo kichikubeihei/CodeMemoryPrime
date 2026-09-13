@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum DomainProfile {
     Code,
-    Lore,
-    Ttrpg,
+    Algorithm,
+    Architecture,
+    Verification,
     Agent,
 }
 
@@ -13,84 +14,123 @@ impl DomainProfile {
     pub fn as_str(&self) -> &'static str {
         match self {
             DomainProfile::Code => "code",
-            DomainProfile::Lore => "lore",
-            DomainProfile::Ttrpg => "ttrpg",
+            DomainProfile::Algorithm => "algorithm",
+            DomainProfile::Architecture => "architecture",
+            DomainProfile::Verification => "verification",
             DomainProfile::Agent => "agent",
         }
     }
 }
 
-/// Lore Titan & Altalune Entity Types
+/// AST Symbol & Code Structure Entity
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct LoreEntity {
+pub struct CodeEntity {
     pub id: String,
-    pub entity_type: String, // "character", "faction", "location", "magic_system", "timeline_event", "artifact"
+    pub entity_type: String, // "module", "struct", "enum", "function", "trait", "interface"
     pub name: String,
-    pub description: String,
-    pub aliases: Vec<String>,
-    pub canon_rules: Vec<String>,
+    pub file_path: String,
+    pub line_number: usize,
+    pub signature: String,
+    pub docstring: String,
     pub metadata: serde_json::Value,
 }
 
-impl LoreEntity {
+impl CodeEntity {
     pub fn to_knowledge_node(&self) -> KnowledgeNode {
         let metadata_val = serde_json::json!({
-            "aliases": self.aliases,
-            "canon_rules": self.canon_rules,
+            "file_path": self.file_path,
+            "line_number": self.line_number,
+            "signature": self.signature,
             "extra": self.metadata
         });
 
         KnowledgeNode {
             id: self.id.clone(),
-            profile: DomainProfile::Lore.as_str().to_string(),
+            profile: DomainProfile::Code.as_str().to_string(),
+            entity_type: self.entity_type.clone(),
+            name: self.name.clone(),
+            content: self.docstring.clone(),
+            metadata_json: metadata_val.to_string(),
+            created_at: chrono::Utc::now().to_rfc3339(),
+            updated_at: chrono::Utc::now().to_rfc3339(),
+            evidence_tier: "ast_proven".to_string(),
+        }
+    }
+}
+
+/// Verified Algorithm & Performance Spell Entity
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AlgorithmEntity {
+    pub id: String,
+    pub entity_type: String, // "sorting", "graph", "cache_blocking", "lock_free", "simd", "compression"
+    pub name: String,
+    pub complexity: String, // e.g. "O(N log N)", "O(1)"
+    pub invariants: Vec<String>,
+    pub implementation: String,
+    pub benchmarks: serde_json::Value,
+}
+
+impl AlgorithmEntity {
+    pub fn to_knowledge_node(&self) -> KnowledgeNode {
+        let metadata_val = serde_json::json!({
+            "complexity": self.complexity,
+            "invariants": self.invariants,
+            "benchmarks": self.benchmarks
+        });
+
+        KnowledgeNode {
+            id: self.id.clone(),
+            profile: DomainProfile::Algorithm.as_str().to_string(),
+            entity_type: self.entity_type.clone(),
+            name: self.name.clone(),
+            content: self.implementation.clone(),
+            metadata_json: metadata_val.to_string(),
+            created_at: chrono::Utc::now().to_rfc3339(),
+            updated_at: chrono::Utc::now().to_rfc3339(),
+            evidence_tier: "kani_verified".to_string(),
+        }
+    }
+}
+
+/// Software System & Architecture Entity
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ArchitectureEntity {
+    pub id: String,
+    pub entity_type: String, // "subsystem", "api_contract", "pipeline", "storage_schema", "security_boundary"
+    pub name: String,
+    pub description: String,
+    pub dependencies: Vec<String>,
+    pub tech_stack: Vec<String>,
+    pub metadata: serde_json::Value,
+}
+
+impl ArchitectureEntity {
+    pub fn to_knowledge_node(&self) -> KnowledgeNode {
+        let metadata_val = serde_json::json!({
+            "dependencies": self.dependencies,
+            "tech_stack": self.tech_stack,
+            "extra": self.metadata
+        });
+
+        KnowledgeNode {
+            id: self.id.clone(),
+            profile: DomainProfile::Architecture.as_str().to_string(),
             entity_type: self.entity_type.clone(),
             name: self.name.clone(),
             content: self.description.clone(),
             metadata_json: metadata_val.to_string(),
             created_at: chrono::Utc::now().to_rfc3339(),
             updated_at: chrono::Utc::now().to_rfc3339(),
-            evidence_tier: "axiom".to_string(),
+            evidence_tier: "architectural".to_string(),
         }
     }
 }
 
-/// RuleForge TTRPG Entity Types
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct TtrpgEntity {
-    pub id: String,
-    pub entity_type: String, // "stat_block", "spell", "condition", "dice_mechanic", "action_economy"
-    pub system_edition: String, // "dnd5e", "pf2e", "custom"
-    pub name: String,
-    pub rules_text: String,
-    pub mechanics: serde_json::Value,
-}
-
-impl TtrpgEntity {
-    pub fn to_knowledge_node(&self) -> KnowledgeNode {
-        let metadata_val = serde_json::json!({
-            "system_edition": self.system_edition,
-            "mechanics": self.mechanics
-        });
-
-        KnowledgeNode {
-            id: self.id.clone(),
-            profile: DomainProfile::Ttrpg.as_str().to_string(),
-            entity_type: self.entity_type.clone(),
-            name: self.name.clone(),
-            content: self.rules_text.clone(),
-            metadata_json: metadata_val.to_string(),
-            created_at: chrono::Utc::now().to_rfc3339(),
-            updated_at: chrono::Utc::now().to_rfc3339(),
-            evidence_tier: "axiom".to_string(),
-        }
-    }
-}
-
-/// AIMACS Autonomous Agent Entity Types
+/// Autonomous Coding Agent Session Entity
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AgentEntity {
     pub id: String,
-    pub entity_type: String, // "subagent_state", "task_goal", "gate_ledger", "decision_log"
+    pub entity_type: String, // "pairing_session", "task_goal", "gate_ledger", "decision_log"
     pub name: String,
     pub status: String,
     pub current_goal: String,

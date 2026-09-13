@@ -236,7 +236,7 @@ mod tests {
             "typescript/react",
             "qwen2.5-coder:32b",
             "export function SafeHydrate({ children }) { return <>{children}</>; }",
-            "Fixes SSR layout shifts in 2ndsLaravel",
+            "Fixes SSR layout shifts in web applications",
             &metrics,
             30,
         ).unwrap();

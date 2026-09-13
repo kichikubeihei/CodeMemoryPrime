@@ -8,8 +8,8 @@ fn default_evidence_tier() -> String {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct KnowledgeNode {
     pub id: String,
-    pub profile: String,       // "code", "lore", "ttrpg", "agent"
-    pub entity_type: String,   // "character", "faction", "spell", "subagent", "function", etc.
+    pub profile: String,       // "code", "algorithm", "architecture", "verification", "agent"
+    pub entity_type: String,   // "function", "struct", "module", "contract", "test_gate", etc.
     pub name: String,
     pub content: String,
     pub metadata_json: String, // Rich JSON metadata
@@ -345,58 +345,59 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         init_knowledge_graph_tables(&conn).unwrap();
 
-        // 1. Insert Characters for Lore Titan
-        let aragorn = KnowledgeNode {
-            id: "char_aragorn".to_string(),
-            profile: "lore".to_string(),
-            entity_type: "character".to_string(),
-            name: "Aragorn II Elessar".to_string(),
-            content: "High King of Gondor and Arnor, Chieftain of the Dúnedain.".to_string(),
-            metadata_json: r#"{"race":"Human","title":"King of Gondor"}"#.to_string(),
+        // 1. Insert Software Components
+        let auth_svc = KnowledgeNode {
+            id: "mod_auth_service".to_string(),
+            profile: "code".to_string(),
+            entity_type: "module".to_string(),
+            name: "AuthenticationService".to_string(),
+            content: "Coordinates user authentication, token issuance, and session verification.".to_string(),
+            metadata_json: r#"{"language":"rust","loc":420}"#.to_string(),
             created_at: "2026-08-31T00:00:00Z".to_string(),
             updated_at: "2026-08-31T00:00:00Z".to_string(),
-            evidence_tier: "axiom".to_string(),
+            evidence_tier: "ast_proven".to_string(),
         };
-        let arwen = KnowledgeNode {
-            id: "char_arwen".to_string(),
-            profile: "lore".to_string(),
-            entity_type: "character".to_string(),
-            name: "Arwen Undómiel".to_string(),
-            content: "Queen of the Reunited Kingdom, daughter of Elrond.".to_string(),
-            metadata_json: r#"{"race":"Half-elven"}"#.to_string(),
+        let token_verifier = KnowledgeNode {
+            id: "fn_token_verifier".to_string(),
+            profile: "code".to_string(),
+            entity_type: "function".to_string(),
+            name: "verify_jwt_token".to_string(),
+            content: "Cryptographically verifies RS256 token signatures and claims.".to_string(),
+            metadata_json: r#"{"pure":true,"panic_free":true}"#.to_string(),
             created_at: "2026-08-31T00:00:00Z".to_string(),
             updated_at: "2026-08-31T00:00:00Z".to_string(),
-            evidence_tier: "axiom".to_string(),
+            evidence_tier: "ast_proven".to_string(),
         };
 
-        insert_knowledge_node(&conn, &aragorn).unwrap();
-        insert_knowledge_node(&conn, &arwen).unwrap();
+        insert_knowledge_node(&conn, &auth_svc).unwrap();
+        insert_knowledge_node(&conn, &token_verifier).unwrap();
 
         // 2. Insert Relationship Edge
         let edge = KnowledgeEdge {
-            id: "edge_aragorn_arwen".to_string(),
-            profile: "lore".to_string(),
-            source_id: "char_aragorn".to_string(),
-            target_id: "char_arwen".to_string(),
-            relation_type: "betrothed_to".to_string(),
+            id: "edge_auth_verifier".to_string(),
+            profile: "code".to_string(),
+            source_id: "mod_auth_service".to_string(),
+            target_id: "fn_token_verifier".to_string(),
+            relation_type: "calls".to_string(),
             intensity: 1.0,
-            metadata_json: r#"{"status":"married"}"#.to_string(),
+            metadata_json: r#"{"call_type":"synchronous"}"#.to_string(),
             created_at: "2026-08-31T00:00:00Z".to_string(),
         };
         insert_knowledge_edge(&conn, &edge).unwrap();
 
         // 3. Query Nodes by Type
-        let chars = query_nodes_by_type(&conn, "lore", "character").unwrap();
-        assert_eq!(chars.len(), 2);
+        let funcs = query_nodes_by_type(&conn, "code", "function").unwrap();
+        assert_eq!(funcs.len(), 1);
+        assert_eq!(funcs[0].name, "verify_jwt_token");
 
         // 4. Query Flat Edges for Visualizer
-        let flat_edges = query_all_edges_flat(&conn, "lore").unwrap();
+        let flat_edges = query_all_edges_flat(&conn, "code").unwrap();
         assert_eq!(flat_edges.len(), 1);
-        assert_eq!(flat_edges[0].source_name, "Aragorn II Elessar");
-        assert_eq!(flat_edges[0].target_name, "Arwen Undómiel");
+        assert_eq!(flat_edges[0].source_name, "AuthenticationService");
+        assert_eq!(flat_edges[0].target_name, "verify_jwt_token");
 
         // 5. Query Recursive Subgraph
-        let subgraph = query_subgraph(&conn, "char_aragorn", 2).unwrap();
+        let subgraph = query_subgraph(&conn, "mod_auth_service", 2).unwrap();
         assert_eq!(subgraph.nodes.len(), 2);
         assert_eq!(subgraph.edges.len(), 1);
     }

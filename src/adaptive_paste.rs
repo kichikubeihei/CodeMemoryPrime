@@ -21,7 +21,7 @@ pub struct AdaptivePasteResult {
 
 pub fn get_preset_domain_lexicon(domain: &str) -> LexicalMapping {
     match domain.to_lowercase().as_str() {
-        "sci-fi" | "scifi" | "space" | "project-new-frontier" => LexicalMapping {
+        "sci-fi" | "scifi" | "space" => LexicalMapping {
             projectile: "laser".to_string(),
             target: "hull_entity".to_string(),
             mitigation: "energy_shield".to_string(),
@@ -35,14 +35,14 @@ pub fn get_preset_domain_lexicon(domain: &str) -> LexicalMapping {
             resolve_action: "bullet_hit".to_string(),
             value_metric: "ballistic_damage".to_string(),
         },
-        "medieval" | "fantasy" | "ruleforge" => LexicalMapping {
+        "medieval" | "fantasy" => LexicalMapping {
             projectile: "arrow".to_string(),
             target: "creature_entity".to_string(),
             mitigation: "plate_armor".to_string(),
             resolve_action: "arrow_impact".to_string(),
             value_metric: "piercing_damage".to_string(),
         },
-        "retail" | "ecommerce" | "2ndslaravel" => LexicalMapping {
+        "retail" | "ecommerce" => LexicalMapping {
             projectile: "line_item".to_string(),
             target: "shopping_cart".to_string(),
             mitigation: "discount_voucher".to_string(),
@@ -107,7 +107,7 @@ mod tests {
         assert!(scifi_res.adapted_code.contains("fn laser_hit(laser: Entity, hull_entity: &mut Target)"));
         assert!(scifi_res.adapted_code.contains("hull_entity.energy_shield"));
 
-        let retail_res = adapt_code_to_domain(template, "2ndslaravel", None);
+        let retail_res = adapt_code_to_domain(template, "ecommerce", None);
         assert!(retail_res.adapted_code.contains("fn apply_discount(line_item: Entity, shopping_cart: &mut Target)"));
         assert!(retail_res.adapted_code.contains("shopping_cart.discount_voucher"));
     }

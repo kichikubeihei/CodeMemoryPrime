@@ -12,7 +12,7 @@ pub fn list_schemas() -> Vec<Value> {
                 "type": "object",
                 "properties": {
                     "directory_path": { "type": "string", "description": "Absolute path to the project root directory to index." },
-                    "project_name": { "type": "string", "description": "Unique project identifier. Use a consistent name (e.g. 'altalune', 'mcp-coder-memory') across all tool calls for this project." }
+                    "project_name": { "type": "string", "description": "Unique project identifier. Use a consistent name (e.g. 'my-backend', 'mcp-coder-memory') across all tool calls for this project." }
                 },
                 "required": ["directory_path", "project_name"]
             }
