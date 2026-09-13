@@ -28,13 +28,71 @@ pub fn calculate_chunk_hash(code_content: &str) -> String {
     hex::encode(hasher.finalize())
 }
 
+pub fn get_license_file_path() -> Option<std::path::PathBuf> {
+    let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")).ok()?;
+    let home_path = std::path::PathBuf::from(home);
+    let p1 = home_path.join(".cmp").join("license.key");
+    if p1.exists() {
+        return Some(p1);
+    }
+    let p2 = home_path.join(".codememoryprime").join("license.key");
+    if p2.exists() {
+        return Some(p2);
+    }
+    Some(p1)
+}
+
+pub fn read_license_from_disk() -> Option<String> {
+    if let Some(p) = get_license_file_path() {
+        if p.exists() {
+            if let Ok(content) = std::fs::read_to_string(p) {
+                let trimmed = content.trim();
+                if !trimmed.is_empty() {
+                    return Some(trimmed.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+pub fn try_refresh_license_online(current_key: &str) -> Option<String> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_millis(2500))
+        .build()
+        .ok()?;
+
+    let resp = client
+        .get("https://www.codememoryprime.com/api/refresh-license")
+        .query(&[("key", current_key)])
+        .send()
+        .ok()?;
+
+    if resp.status().is_success() {
+        let json: serde_json::Value = resp.json().ok()?;
+        if let Some(new_key) = json.get("license_key").and_then(|k| k.as_str()) {
+            if let Some(path) = get_license_file_path() {
+                if let Some(parent) = path.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                let _ = std::fs::write(&path, new_key.trim());
+            }
+            return Some(new_key.trim().to_string());
+        }
+    }
+    None
+}
+
 pub fn check_license_key(key_str: Option<&str>) -> LicenseStatus {
     let key = match key_str {
         Some(k) if !k.trim().is_empty() => k.trim().to_string(),
         _ => match std::env::var("CMP_LICENSE_KEY").or_else(|_| std::env::var("DIVIDER_LICENSE_KEY")) {
             Ok(k) if !k.trim().is_empty() => k,
-            _ => return LicenseStatus::FreeTier {
-                message: "Running CodeMemoryPrime (CMP) BSL 1.1 Free Tier (Personal/Evaluation Use). For commercial team licensing, visit https://www.codememoryprime.com".to_string()
+            _ => match read_license_from_disk() {
+                Some(k) => k,
+                None => return LicenseStatus::FreeTier {
+                    message: "Running CodeMemoryPrime (CMP) BSL 1.1 Free Tier (Personal/Evaluation Use). For commercial team licensing, visit https://www.codememoryprime.com".to_string()
+                },
             },
         },
     };
@@ -66,6 +124,18 @@ pub fn check_license_key(key_str: Option<&str>) -> LicenseStatus {
     // Check expiration date
     if let Ok(exp_date) = chrono::NaiveDate::parse_from_str(&payload.expires, "%Y-%m-%d") {
         let now = chrono::Local::now().naive_local().date();
+        let days_remaining = (exp_date - now).num_days();
+
+        // If enterprise key has <= 7 days remaining or has just expired (within 5-day grace period),
+        // try silent background refresh from production endpoint
+        if payload.license_type == "enterprise" && days_remaining <= 7 {
+            if let Some(refreshed_key) = try_refresh_license_online(&key) {
+                if refreshed_key != key {
+                    return check_license_key(Some(&refreshed_key));
+                }
+            }
+        }
+
         if now > exp_date {
             return LicenseStatus::Expired { licensee: payload.licensee, expires: payload.expires };
         }
