@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "The high-performance Rust MCP codebase intelligence and persistent memory engine for AI coding agents."
 license = "BSL-1.1"
-repository = "https://github.com/rickieblevins/CodeMemoryPrime"
+repository = "https://github.com/kichikubeihei/CodeMemoryPrime"
 keywords = ["mcp", "codebase-memory", "rag", "ai-agent", "tree-sitter"]
 categories = ["development-tools", "command-line-utilities"]
 
@@ -37,3 +37,10 @@ ed25519-dalek = { version = "2.1", features = ["pem"] }
 base64 = "0.22"
 pulldown-cmark = "0.13.4"
 scraper = "0.27.0"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true

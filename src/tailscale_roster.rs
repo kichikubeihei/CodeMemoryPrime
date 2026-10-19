@@ -1,6 +1,6 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::io::Write;
 use std::time::Duration;
 
@@ -26,7 +26,7 @@ pub fn sync_tailscale_model_roster(
     endpoint: Option<&str>,
     gemini_md_path: Option<&str>,
 ) -> std::result::Result<RosterSyncResult, String> {
-    let host = endpoint.unwrap_or("http://100.102.233.128:11434");
+    let host = endpoint.unwrap_or("http://127.0.0.1:11434");
     let md_path = gemini_md_path.unwrap_or_else(|| {
         // default to ~/.gemini/config/GEMINI.md
         Box::leak(
@@ -181,7 +181,7 @@ mod tests {
     #[test]
     fn test_roster_sync_result_fields() {
         let result = RosterSyncResult {
-            endpoint: "http://100.102.233.128:11434".to_string(),
+            endpoint: "http://127.0.0.1:11434".to_string(),
             models_found: vec![OllamaModel {
                 name: "qwen2.5-coder:32b".to_string(),
                 size: 19_500_000_000,

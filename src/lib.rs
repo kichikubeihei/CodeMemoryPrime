@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 pub mod db;
 pub mod llm;
 pub mod parser;
@@ -38,6 +40,13 @@ pub mod private_vault;
 pub mod memory_delta;
 pub mod research_vault;
 pub mod session_observations;
+pub mod route_tracer;
+pub mod complexity_radar;
+pub mod token_meter;
+pub mod worktree_manager;
+pub mod domain_gates;
+pub mod grimoire;
+pub mod installer;
 
 pub fn get_db_path() -> String {
     let base = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());

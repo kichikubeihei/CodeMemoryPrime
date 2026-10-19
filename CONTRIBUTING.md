@@ -23,7 +23,7 @@ First off, thanks for wanting to help out! Whether you're fixing a typo, adding 
 [ How to Build & Run Tests ]
 
 1. Grab the code:
-   git clone https://github.com/rickieblevins/CodeMemoryPrime.git
+   git clone https://github.com/kichikubeihei/CodeMemoryPrime.git
    cd CodeMemoryPrime
 
 2. Run the test suite:

@@ -292,6 +292,12 @@ pub fn init_database(db_path: &str) -> Result<()> {
     let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_obs_file ON session_observations(target_file)", []);
     let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_obs_time ON session_observations(timestamp)", []);
 
+    // 16. Complexity Radar & File Metrics Tables
+    crate::complexity_radar::init_metrics_tables(&conn)?;
+
+    // 17. Domain Rules Table
+    crate::domain_gates::init_domain_rules_table(&conn)?;
+
     Ok(())
 }
 

@@ -23,6 +23,14 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 1 {
         match args[1].as_str() {
+            "install" | "--install" | "setup" | "--setup" => {
+                codememory_prime::installer::handle_install(&args);
+                return;
+            }
+            "status" | "--status" => {
+                codememory_prime::installer::handle_status();
+                return;
+            }
             "preflight" | "--preflight" | "cmp_preflight" => {
                 println!("{}", codememory_prime::tools::run_preflight_audit(&rt));
                 return;
@@ -59,11 +67,17 @@ fn main() {
                 println!("CodeMemoryPrime (CMP) - Unified Codebase Memory & Intelligence Engine");
                 println!("\nUsage:");
                 println!("  cmp                      Start MCP stdio JSON-RPC server (default)");
+                println!("  cmp serve                Start MCP stdio JSON-RPC server (explicit)");
+                println!("  cmp install [--all]      Auto-detect and configure Claude, Cursor, Windsurf, VS Code & Antigravity");
+                println!("  cmp status               Inspect installed binary, SQLite DB, Grimoire contracts & IDE wiring");
                 println!("  cmp preflight            Run full system preflight audit");
                 println!("  cmp sync-memory [URL]    Sync GPU roster and export local delta snapshot");
                 println!("  cmp research [KEYWORD]   Query recorded video analyses & architecture upgrades");
                 println!("\nNote: Automated multi-device cloud sync (Cloudflare R2, Tailscale daemon) is in CodeMemoryPrime-Pro (`cmp-pro`).");
                 return;
+            }
+            "serve" | "--serve" => {
+                // Proceed to start the MCP stdio JSON-RPC server below
             }
             _ => {}
         }

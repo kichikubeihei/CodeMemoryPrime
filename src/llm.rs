@@ -160,7 +160,7 @@ pub struct LlmConfig {
     pub provider: String,           // "ollama" or "openai"
     pub pipeline_mode: String,      // "auto", "full_remote", "hybrid_remote_orch", "full_local"
     pub base_url: String,           // Local base URL (e.g. "http://127.0.0.1:11434")
-    pub remote_base_url: String,    // Remote Tailscale URL (e.g. "http://100.102.233.128:11434")
+    pub remote_base_url: String,    // Remote URL (e.g. "http://remote-host:11434")
     pub gen_model: String,          // Local Coder model (e.g. "qwen2.5-coder:14b")
     pub remote_orch_model: String, // Remote Orchestrator model (e.g. "muse-glimmer:30b")
     pub remote_gen_model: String,  // Remote Coder model (e.g. "qwen2.5-coder:14b")

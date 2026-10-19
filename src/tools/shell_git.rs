@@ -60,12 +60,82 @@ pub fn list_schemas() -> Vec<Value> {
                     "cwd": { "type": "string", "description": "Repository path (optional)." }
                 }
             }
+        }),
+        json!({
+            "name": "bound_shell_output",
+            "description": "Bounds and truncates raw terminal/build/test outputs, preserving command headers and error tracebacks while collapsing repetitive passing logs.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "raw_output": { "type": "string", "description": "Raw string of terminal stdout/stderr." },
+                    "max_bytes": { "type": "integer", "description": "Optional max bytes threshold (default: 4000)." }
+                },
+                "required": ["raw_output"]
+            }
+        }),
+        json!({
+            "name": "execute_and_bound_cmd",
+            "description": "Executes a shell command (e.g. 'cargo test', 'npm test') and automatically bounds the stdout/stderr output in Rust before returning it to the model, collapsing passing logs while preserving error tracebacks to slash token usage.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "command": { "type": "string", "description": "The exact CLI command string to execute." },
+                    "cwd": { "type": "string", "description": "Optional working directory." },
+                    "max_bytes": { "type": "integer", "description": "Optional max bytes threshold (default: 4000)." }
+                },
+                "required": ["command"]
+            }
         })
     ]
 }
 
 pub fn handle_call(name: &str, params: &Value) -> Option<String> {
     match name {
+        "bound_shell_output" => {
+            let raw = params.get("raw_output").and_then(|s| s.as_str()).unwrap_or("");
+            let max_bytes = params.get("max_bytes").and_then(|b| b.as_u64()).unwrap_or(4000) as usize;
+            let bounded = crate::terminal_bounder::bound_terminal_output(raw, max_bytes);
+            Some(json!({
+                "status": "success",
+                "original_bytes": raw.len(),
+                "bounded_bytes": bounded.len(),
+                "token_reduction_percent": format!("{:.1}%", (raw.len().saturating_sub(bounded.len()) as f64 / raw.len().max(1) as f64) * 100.0),
+                "bounded_output": bounded
+            }).to_string())
+        }
+        "execute_and_bound_cmd" => {
+            let cmd_str = match params.get("command").and_then(|s| s.as_str()) {
+                Some(c) => c,
+                None => return Some(json!({"error": "Missing required 'command'"}).to_string()),
+            };
+            let cwd = params.get("cwd").and_then(|s| s.as_str());
+            let max_bytes = params.get("max_bytes").and_then(|b| b.as_u64()).unwrap_or(4000) as usize;
+
+            let mut cmd = Command::new("sh");
+            cmd.args(["-c", cmd_str]);
+            if let Some(dir) = cwd {
+                cmd.current_dir(dir);
+            }
+
+            match cmd.output() {
+                Ok(output) => {
+                    let stdout_raw = String::from_utf8_lossy(&output.stdout);
+                    let stderr_raw = String::from_utf8_lossy(&output.stderr);
+                    let combined = format!("{}\n{}", stdout_raw, stderr_raw);
+                    let bounded = crate::terminal_bounder::bound_terminal_output(&combined, max_bytes);
+
+                    Some(json!({
+                        "status": if output.status.success() { "success" } else { "failed" },
+                        "exit_code": output.status.code().unwrap_or(-1),
+                        "original_bytes": combined.len(),
+                        "bounded_bytes": bounded.len(),
+                        "token_reduction_percent": format!("{:.1}%", (combined.len().saturating_sub(bounded.len()) as f64 / combined.len().max(1) as f64) * 100.0),
+                        "output": bounded
+                    }).to_string())
+                }
+                Err(e) => Some(json!({"error": format!("Failed to execute command: {}", e)}).to_string()),
+            }
+        }
         "run_command" => {
             let cmd_str = params.get("command").and_then(|s| s.as_str()).unwrap_or("");
             let cwd = params.get("cwd").and_then(|s| s.as_str()).unwrap_or(".");
@@ -89,7 +159,9 @@ pub fn handle_call(name: &str, params: &Value) -> Option<String> {
                     Ok(out) => {
                         let stdout = String::from_utf8_lossy(&out.stdout);
                         let stderr = String::from_utf8_lossy(&out.stderr);
-                        Some(format!("=== Command Exit Code: {} ===\n\nSTDOUT:\n{}\n\nSTDERR:\n{}", out.status.code().unwrap_or(-1), stdout, stderr))
+                        let bounded_stdout = crate::terminal_bounder::bound_terminal_output(&stdout, 4000);
+                        let bounded_stderr = crate::terminal_bounder::bound_terminal_output(&stderr, 4000);
+                        Some(format!("=== Command Exit Code: {} ===\n\nSTDOUT:\n{}\n\nSTDERR:\n{}", out.status.code().unwrap_or(-1), bounded_stdout, bounded_stderr))
                     }
                     Err(err) => Some(format!("Execution error: {}", err)),
                 }

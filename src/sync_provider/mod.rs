@@ -27,7 +27,7 @@ impl Default for SyncConfig {
             r2_secret_access_key: String::new(),
             r2_bucket: "codememory-mesh".to_string(),
             r2_endpoint: None,
-            tailscale_endpoint: "http://100.102.233.128:7788".to_string(),
+            tailscale_endpoint: "http://127.0.0.1:7788".to_string(),
         }
     }
 }
@@ -278,7 +278,7 @@ mod tests {
             r2_secret_access_key: "test_sec_789".to_string(),
             r2_bucket: "my-memory-bucket".to_string(),
             r2_endpoint: Some("https://r2.custom.com".to_string()),
-            tailscale_endpoint: "http://100.102.233.128:7788".to_string(),
+            tailscale_endpoint: "http://127.0.0.1:7788".to_string(),
         };
 
         save_sync_config(&conn, &config).unwrap();

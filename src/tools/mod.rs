@@ -8,132 +8,19 @@ pub mod plugins;
 pub mod system;
 pub mod prompt_audit;
 pub mod custom_docs;
+pub mod pillars;
 
 use serde_json::Value;
 use tokio::runtime::Runtime;
 
 pub fn list_all_tools() -> Vec<Value> {
     let mode = std::env::var("CMP_MODE").unwrap_or_else(|_| "orchestrator".to_string()).to_lowercase();
-    if mode == "orchestrator" || mode == "default" {
-        return vec![
-            serde_json::json!({
-                "name": "orchestrate_code_search",
-                "description": "MANDATORY: Always use this tool FIRST for codebase navigation and symbol retrieval. Automatically performs sub-10ms git diff re-indexing and returns complete AST symbol definitions, exact line numbers, code snippets, and caller graphs in 1 unified step. DO NOT call index_workspace manually, and DO NOT read files in small 20-line slices.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "query": { "type": "string", "description": "Search term, function name, struct, or code signature." },
-                        "project_name": { "type": "string", "description": "Active project identifier." }
-                    },
-                    "required": ["query", "project_name"]
-                }
-            }),
-            serde_json::json!({
-                "name": "orchestrate_security_audit",
-                "description": "Specialist agent orchestrator for DevSecOps audits: verifies HMAC/Merkle memory integrity, scans for prompt injections, unhandled error panics, and supply chain malware in 1 step.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "project_name": { "type": "string", "description": "Active project identifier." }
-                    },
-                    "required": ["project_name"]
-                }
-            }),
-            serde_json::json!({
-                "name": "orchestrate_refactor_and_fix",
-                "description": "MANDATORY: Always use this tool BEFORE modifying code. Automatically fetches historical ADR decisions, calculates failure-aware blast radius, and prepares self-healing refactoring guidelines. DO NOT manually re-index workspace.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "project_name": { "type": "string", "description": "Active project identifier." },
-                        "target_symbol": { "type": "string", "description": "Function, struct, or file path to evaluate." }
-                    },
-                    "required": ["project_name", "target_symbol"]
-                }
-            }),
-            serde_json::json!({
-                "name": "orchestrate_memory_and_context",
-                "description": "Specialist agent orchestrator for memory & token management: prunes stale AST context, manages persistent handoffs, pins invariant facts, and routes model tiers.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "project_name": { "type": "string", "description": "Active project identifier." },
-                        "action": { "type": "string", "enum": ["load_handoff", "save_handoff", "clean_stale", "route_task"], "description": "Memory management action." }
-                    },
-                    "required": ["project_name", "action"]
-                }
-            }),
-            serde_json::json!({
-                "name": "orchestrate_spec_and_test",
-                "description": "Specialist agent orchestrator for TDD spec generation & persistent alignment: conducts interactive spec alignment interviews, locks invariants, and supersedes old choices.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "feature_request": { "type": "string", "description": "Raw user feature prompt." },
-                        "project_name": { "type": "string", "description": "Target project name." }
-                    },
-                    "required": ["feature_request", "project_name"]
-                }
-            }),
-            serde_json::json!({
-                "name": "orchestrate_full_repo_audit",
-                "description": "Master orchestrator for deep, multi-phase repository audits combining code search, security scanning, memory verification, and architectural assessment.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "repo_path": { "type": "string", "description": "Absolute path to repository." },
-                        "project_name": { "type": "string", "description": "Project identifier." }
-                    },
-                    "required": ["repo_path", "project_name"]
-                }
-            }),
-            serde_json::json!({
-                "name": "cmp_preflight",
-                "description": "Performs full system preflight check: license validation, local Ollama connectivity, Tailscale model roster status, SQLite memory stats, and cryptographic integrity.",
-                "inputSchema": { "type": "object", "properties": {} }
-            }),
-            serde_json::json!({
-                "name": "sync_memory",
-                "description": "Syncs the Tailscale Ollama model roster into GEMINI.md and exports a local memory delta snapshot. (For automated Cloudflare R2 / Tailscale daemon sync, use CodeMemoryPrime-Pro).",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "endpoint": { "type": "string", "description": "Optional custom Ollama Tailscale endpoint URL." }
-                    }
-                }
-            }),
-            serde_json::json!({
-                "name": "record_research",
-                "description": "Records and indexes YouTube video analysis, technical research papers, or architecture upgrade blueprints into the persistent cryptographic Research Vault.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "media_url": { "type": "string", "description": "URL of the YouTube video, paper, or article." },
-                        "title": { "type": "string", "description": "Title of the video or research material." },
-                        "media_type": { "type": "string", "enum": ["youtube_video", "technical_paper", "web_article", "repo"], "description": "Type of media." },
-                        "target_project": { "type": "string", "description": "Target project (e.g. 'CodeMemoryPrime-Pro', 'AlgorithmEngine', 'WebApp')." },
-                        "key_takeaways": { "type": "string", "description": "Core concepts, architecture ideas, or technical summaries." },
-                        "proposed_upgrades": { "type": "string", "description": "Actionable code upgrades and feature backlog items derived from this research." }
-                    },
-                    "required": ["media_url", "title", "key_takeaways", "proposed_upgrades"]
-                }
-            }),
-            serde_json::json!({
-                "name": "query_research",
-                "description": "Queries recorded YouTube video analyses, research papers, and technical upgrade notes across all synced projects.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "target_project": { "type": "string", "description": "Filter by target project or 'all'." },
-                        "keyword": { "type": "string", "description": "Search keyword in titles, takeaways, or proposed upgrades." },
-                        "limit": { "type": "integer", "description": "Max number of records to return (default: 5)." }
-                    }
-                }
-            }),
-        ];
-    }
-
     let mut tools = Vec::new();
+
+    // 1. First-class 4-Pillars (Slashes MCP prompt context by 85%)
+    tools.extend(pillars::list_schemas());
+
+    // 2. High-leverage compound & utility tools
     tools.push(serde_json::json!({
         "name": "cmp_preflight",
         "description": "Performs full system preflight check: license validation, local Ollama connectivity, Tailscale model roster status, SQLite memory stats, and cryptographic integrity.",
@@ -141,7 +28,7 @@ pub fn list_all_tools() -> Vec<Value> {
     }));
     tools.push(serde_json::json!({
         "name": "sync_memory",
-        "description": "Performs distributed memory mesh sync (Cloudflare R2, Tailscale daemon) and refreshes the Tailscale Ollama model roster into GEMINI.md.",
+        "description": "Syncs the Tailscale Ollama model roster into GEMINI.md and exports a local memory delta snapshot.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -158,7 +45,7 @@ pub fn list_all_tools() -> Vec<Value> {
                 "media_url": { "type": "string", "description": "URL of the YouTube video, paper, or article." },
                 "title": { "type": "string", "description": "Title of the video or research material." },
                 "media_type": { "type": "string", "enum": ["youtube_video", "technical_paper", "web_article", "repo"], "description": "Type of media." },
-                "target_project": { "type": "string", "description": "Target project (e.g. 'CodeMemoryPrime-Pro', 'AlgorithmEngine', 'WebApp')." },
+                "target_project": { "type": "string", "description": "Target project (e.g. 'CodeMemoryPrime', 'AlgorithmEngine', 'WebApp')." },
                 "key_takeaways": { "type": "string", "description": "Core concepts, architecture ideas, or technical summaries." },
                 "proposed_upgrades": { "type": "string", "description": "Actionable code upgrades and feature backlog items derived from this research." }
             },
@@ -177,6 +64,109 @@ pub fn list_all_tools() -> Vec<Value> {
             }
         }
     }));
+    tools.push(serde_json::json!({
+        "name": "bound_shell_output",
+        "description": "Bounds and truncates raw terminal/build/test outputs, preserving command headers and error tracebacks while collapsing repetitive passing logs to save tokens.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "raw_output": { "type": "string", "description": "Raw string of terminal stdout/stderr." },
+                "max_bytes": { "type": "integer", "description": "Optional max bytes threshold (default: 4000)." }
+            },
+            "required": ["raw_output"]
+        }
+    }));
+    tools.push(serde_json::json!({
+        "name": "execute_and_bound_cmd",
+        "description": "Executes a shell command (e.g. 'cargo test', 'npm test') and automatically bounds the stdout/stderr output in Rust before returning it to the model, collapsing passing logs while preserving error tracebacks.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "command": { "type": "string", "description": "The exact CLI command string to execute." },
+                "cwd": { "type": "string", "description": "Optional working directory." },
+                "max_bytes": { "type": "integer", "description": "Optional max bytes threshold (default: 4000)." }
+            },
+            "required": ["command"]
+        }
+    }));
+
+    if mode == "orchestrator" || mode == "default" {
+        // Orchestrator backward-compatible aliases
+        tools.push(serde_json::json!({
+            "name": "orchestrate_code_search",
+            "description": "MANDATORY: Always use this tool FIRST for codebase navigation and symbol retrieval. Automatically performs sub-10ms git diff re-indexing and returns complete AST symbol definitions, exact line numbers, code snippets, and caller graphs in 1 unified step. DO NOT call index_workspace manually, and DO NOT read files in small 20-line slices.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": { "type": "string", "description": "Search term, function name, struct, or code signature." },
+                    "project_name": { "type": "string", "description": "Active project identifier." }
+                },
+                "required": ["query", "project_name"]
+            }
+        }));
+        tools.push(serde_json::json!({
+            "name": "orchestrate_security_audit",
+            "description": "Specialist agent orchestrator for DevSecOps audits: verifies HMAC/Merkle memory integrity, scans for prompt injections, unhandled error panics, and supply chain malware in 1 step.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "project_name": { "type": "string", "description": "Active project identifier." }
+                },
+                "required": ["project_name"]
+            }
+        }));
+        tools.push(serde_json::json!({
+            "name": "orchestrate_refactor_and_fix",
+            "description": "MANDATORY: Always use this tool BEFORE modifying code. Automatically fetches historical ADR decisions, calculates failure-aware blast radius, and prepares self-healing refactoring guidelines. DO NOT manually re-index workspace.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "project_name": { "type": "string", "description": "Active project identifier." },
+                    "target_symbol": { "type": "string", "description": "Function, struct, or file path to evaluate." }
+                },
+                "required": ["project_name", "target_symbol"]
+            }
+        }));
+        tools.push(serde_json::json!({
+            "name": "orchestrate_memory_and_context",
+            "description": "Specialist agent orchestrator for memory & token management: prunes stale AST context, manages persistent handoffs, pins invariant facts, and routes model tiers.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "project_name": { "type": "string", "description": "Active project identifier." },
+                    "action": { "type": "string", "enum": ["load_handoff", "save_handoff", "clean_stale", "route_task"], "description": "Memory management action." }
+                },
+                "required": ["project_name", "action"]
+            }
+        }));
+        tools.push(serde_json::json!({
+            "name": "orchestrate_spec_and_test",
+            "description": "Specialist agent orchestrator for TDD spec generation & persistent alignment: conducts interactive spec alignment interviews, locks invariants, and supersedes old choices.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "feature_request": { "type": "string", "description": "Raw user feature prompt." },
+                    "project_name": { "type": "string", "description": "Target project name." }
+                },
+                "required": ["feature_request", "project_name"]
+            }
+        }));
+        tools.push(serde_json::json!({
+            "name": "orchestrate_full_repo_audit",
+            "description": "Master orchestrator for deep, multi-phase repository audits combining code search, security scanning, memory verification, and architectural assessment.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "repo_path": { "type": "string", "description": "Absolute path to repository." },
+                    "project_name": { "type": "string", "description": "Project identifier." }
+                },
+                "required": ["repo_path", "project_name"]
+            }
+        }));
+        return tools;
+    }
+
+    // Granular mode
     tools.extend(codebase::list_schemas());
     tools.extend(memory::list_schemas());
     tools.extend(file_ops::list_schemas());
@@ -229,7 +219,7 @@ pub fn run_preflight_audit(rt: &Runtime) -> String {
     let remote_url = if !cfg.remote_base_url.is_empty() {
         cfg.remote_base_url.clone()
     } else {
-        std::env::var("MCP_LLM_REMOTE_BASE_URL").unwrap_or_else(|_| "http://100.102.233.128:11434".to_string())
+        std::env::var("MCP_LLM_REMOTE_BASE_URL").unwrap_or_else(|_| "http://127.0.0.1:11434".to_string())
     };
     out.push_str(&format!(" [i] **Tailscale Endpoint**: Checking `{}`...\n", remote_url));
     match crate::tailscale_roster::sync_tailscale_model_roster(Some(&remote_url), None) {
@@ -264,7 +254,7 @@ pub fn run_sync_memory(endpoint: Option<&str>, _rt: &Runtime) -> String {
         if !cfg.remote_base_url.is_empty() {
             cfg.remote_base_url.clone()
         } else {
-            std::env::var("MCP_LLM_REMOTE_BASE_URL").unwrap_or_else(|_| "http://100.102.233.128:11434".to_string())
+            std::env::var("MCP_LLM_REMOTE_BASE_URL").unwrap_or_else(|_| "http://127.0.0.1:11434".to_string())
         }
     });
 
@@ -307,6 +297,10 @@ pub fn run_sync_memory(endpoint: Option<&str>, _rt: &Runtime) -> String {
 }
 
 pub fn dispatch_tool_call(name: &str, params: &Value, rt: &Runtime) -> Option<String> {
+    if let Some(res) = pillars::handle_call(name, params, rt) {
+        return Some(res);
+    }
+
     match name {
         "cmp_preflight" | "orchestrate_preflight" => {
             return Some(run_preflight_audit(rt));

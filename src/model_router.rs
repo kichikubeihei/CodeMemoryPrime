@@ -24,12 +24,12 @@ pub fn route_task(task_type: &str, payload_bytes: usize) -> TaskRouteRecommendat
             task_type: task_type.to_string(),
             recommended_tier: "Tier1_Lightweight_Tailscale".to_string(),
             model_suggestions: vec![
-                "tailscale/qwen2.5-coder:32b (http://100.102.233.128:11434)".to_string(),
-                "tailscale/qwen2.5-coder:14b".to_string(),
+                "local/qwen2.5-coder:32b (http://127.0.0.1:11434)".to_string(),
+                "local/qwen2.5-coder:14b".to_string(),
                 "antigravity/gemini-3.7-flash".to_string(),
             ],
             estimated_cost_factor: "$0.00 Local / Ultra-Low".to_string(),
-            rationale: "Task is structural, retrieval-focused, or low-complexity. Routing to Tailscale workstation (96GB RAM / RTX 5070 Ti) eliminates API quota usage.".to_string(),
+            rationale: "Task is structural, retrieval-focused, or low-complexity. Routing to local GPU instance eliminates API quota usage.".to_string(),
         }
     } else {
         TaskRouteRecommendation {

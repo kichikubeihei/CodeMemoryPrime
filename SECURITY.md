@@ -35,5 +35,5 @@ Allowed command prefixes:
 If you spot a security issue or vulnerability in CodeMemoryPrime:
 
 1. Please don't post it in a public GitHub issue right away.
-2. Send an email directly to `license@rickieblevins.com` so we can look into it.
+2. Send an email directly to `kichiku.beihei@gmail.com` so we can look into it.
 3. We'll get back to you within 48 hours and get a fix out as fast as possible.

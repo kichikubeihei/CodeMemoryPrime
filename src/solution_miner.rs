@@ -141,7 +141,7 @@ pub fn scan_and_vault_repo_solutions(
 
 pub fn audit_tech_debt_against_vault(
     repo_path: &str,
-    conn: &Connection,
+    _conn: &Connection,
 ) -> Vec<TechDebtAuditIssue> {
     let mut issues = Vec::new();
     let root = Path::new(repo_path);

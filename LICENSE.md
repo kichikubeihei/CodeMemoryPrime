@@ -1,6 +1,6 @@
 # Business Source License 1.1
 
-**Licensor**: CodeMemoryPrime / Rickie Blevins
+**Licensor**: CodeMemoryPrime Collective
 **Licensed Work**: `CodeMemoryPrime` (`cmp`)
 **Change Date**: 3 years from the date of release of each version
 **Change License**: Apache License, Version 2.0
@@ -22,14 +22,14 @@ You are granted permission to use the Licensed Work for:
 Any use of the Licensed Work that exceeds the Additional Use Grant (including use by organizations with more than 3 developers or over $100,000 USD in annual revenue) requires a paid **Commercial License**.
 
 To purchase a Commercial License or Enterprise License, visit:
-**[https://www.codememoryprime.com](https://www.codememoryprime.com)** or contact `license@rickieblevins.com`.
+**[https://www.codememoryprime.com](https://www.codememoryprime.com)** or contact `kichiku.beihei@gmail.com`.
 
 ---
 
 ## Terms of the Business Source License 1.1
 
 Parameters:
-- **Licensor**: CodeMemoryPrime / Rickie Blevins
+- **Licensor**: CodeMemoryPrime Collective
 - **Licensed Work**: The software code, libraries, and binaries provided in this repository.
 - **Additional Use Grant**: Set forth above.
 - **Change Date**: 3 years from the release date of each specific version.

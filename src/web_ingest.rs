@@ -120,7 +120,7 @@ pub fn analyze_doc_with_local_llm(url_or_text: &str, endpoint: Option<&str>) -> 
     let env_url = std::env::var("OLLAMA_HOST").ok();
     let local_url = endpoint
         .or_else(|| env_url.as_deref())
-        .unwrap_or("http://100.102.233.128:11434");
+        .unwrap_or("http://127.0.0.1:11434");
 
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()

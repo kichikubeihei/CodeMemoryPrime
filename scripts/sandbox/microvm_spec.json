@@ -1,0 +1,41 @@
+{
+  "boot-source": {
+    "kernel_image_path": "/var/lib/firecracker/vmlinux-6.1.custom",
+    "boot_args": "console=ttyS0 reboot=k panic=1 pci=off init=/init quiet ro"
+  },
+  "drives": [
+    {
+      "drive_id": "rootfs",
+      "path_on_host": "/var/lib/firecracker/grimoire_rootfs.ext4",
+      "is_root_device": true,
+      "is_read_only": true
+    },
+    {
+      "drive_id": "candidate_payload",
+      "path_on_host": "/tmp/quarantine_candidate.ro",
+      "is_root_device": false,
+      "is_read_only": true
+    }
+  ],
+  "machine-config": {
+    "vcpu_count": 1,
+    "mem_size_mib": 512,
+    "smt": false,
+    "track_dirty_pages": false
+  },
+  "network-interfaces": [],
+  "balloon": {
+    "amount_mib": 0,
+    "deflate_on_oom": false
+  },
+  "vsock": {
+    "guest_cid": 3,
+    "uds_path": "/tmp/firecracker.vsock"
+  },
+  "logger": {
+    "log_path": "/var/log/firecracker.log",
+    "level": "Warning",
+    "show_level": true,
+    "show_log_origin": false
+  }
+}

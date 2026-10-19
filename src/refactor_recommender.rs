@@ -174,6 +174,6 @@ mod tests {
     #[test]
     fn test_scan_workspace_refactor_candidates() {
         let candidates = scan_workspace_for_refactor_candidates(".").unwrap_or_default();
-        assert!(candidates.len() >= 0);
+        let _ = candidates.len();
     }
 }

@@ -1,7 +1,6 @@
-use rusqlite::{params, Connection, Result};
+use rusqlite::{Connection, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SecurityVerdict {
@@ -190,7 +189,7 @@ pub fn calculate_quality_score(code: &str, loc: usize, quorum: u32, exit_code: i
     }
     
     // Quorum popularity bonus
-    score += (quorum.min(15) * 1);
+    score += quorum.min(15);
     
     // Penalty for dangerous constructs
     if code.contains("unsafe {") || code.contains("eval(") {
@@ -210,7 +209,7 @@ pub struct AttributionMetadata {
 
 impl AttributionMetadata {
     pub fn format_code_header(&self, language: &str) -> String {
-        let (comment_start, comment_end) = match language {
+        let (comment_start, _comment_end) = match language {
             "rust" | "typescript" | "javascript" | "svelte" | "svelte5" | "php" => ("//", ""),
             "python" | "ruby" | "shell" => ("#", ""),
             _ => ("//", ""),
