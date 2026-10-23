@@ -63,15 +63,33 @@ pub fn export_memory_delta(
     }
 
     // 2. Export Solution Vault
+    let _ = conn.execute("ALTER TABLE solution_vault ADD COLUMN valid_from TEXT", []);
+    let _ = conn.execute("ALTER TABLE solution_vault ADD COLUMN valid_until TEXT", []);
+    let _ = conn.execute("ALTER TABLE solution_vault ADD COLUMN supersedes TEXT", []);
     let mut solutions = Vec::new();
     if let Ok(mut s_stmt) = conn.prepare(
         "SELECT id, problem_signature, domain_language, winning_model, solution_code, 
-                context_and_constraints, objective_metrics, staleness_score, staleness_decay_days, 
-                created_at, last_verified_at, access_count, hmac_signature, is_stale 
+                context_and_constraints, objective_metrics, staleness_decay_days, 
+                created_at, last_verified_at, access_count, hmac_signature,
+                valid_from, valid_until, supersedes 
          FROM solution_vault"
     ) {
         let s_rows = s_stmt.query_map([], |row| {
             let metrics_str: String = row.get(6)?;
+            let decay_days: u32 = row.get(7)?;
+            let created_at: String = row.get(8)?;
+            let last_verified: String = row.get(9)?;
+
+            let now_sec = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            let clean_verified = last_verified.replace('\'', "");
+            let verified_sec: u64 = clean_verified.parse().unwrap_or(now_sec);
+            let age_days = (now_sec.saturating_sub(verified_sec) as f64) / 86400.0;
+            let decay_limit = (decay_days as f64).max(1.0);
+            let staleness = (age_days / decay_limit).min(1.0);
+
             Ok(SolutionRecord {
                 id: row.get(0)?,
                 problem_signature: row.get(1)?,
@@ -87,13 +105,16 @@ pub fn export_memory_delta(
                     security_clean: true,
                     zero_cls_a11y_score: 100,
                 }),
-                staleness_score: row.get(7)?,
-                staleness_decay_days: row.get(8)?,
-                created_at: row.get(9)?,
-                last_verified_at: row.get(10)?,
-                access_count: row.get(11)?,
-                hmac_signature: row.get(12)?,
-                is_stale: row.get::<_, i32>(13)? != 0,
+                staleness_score: (staleness * 100.0).round() / 100.0,
+                staleness_decay_days: decay_days,
+                created_at,
+                last_verified_at: last_verified,
+                access_count: row.get(10)?,
+                hmac_signature: row.get(11)?,
+                is_stale: staleness > 0.8,
+                valid_from: row.get(12).ok(),
+                valid_until: row.get(13).ok(),
+                supersedes: row.get(14).ok(),
             })
         })?;
         for r in s_rows {
@@ -259,19 +280,26 @@ pub fn import_memory_delta(
     }
 
     // 2. Merge Solution Vault
+    let _ = conn.execute("ALTER TABLE solution_vault ADD COLUMN valid_from TEXT", []);
+    let _ = conn.execute("ALTER TABLE solution_vault ADD COLUMN valid_until TEXT", []);
+    let _ = conn.execute("ALTER TABLE solution_vault ADD COLUMN supersedes TEXT", []);
     let mut s_count = 0;
     for s in &package.solution_vault {
         let metrics_json = serde_json::to_string(&s.objective_metrics).unwrap_or_default();
         conn.execute(
-            "INSERT INTO solution_vault (id, problem_signature, domain_language, winning_model, solution_code, context_and_constraints, objective_metrics, staleness_score, staleness_decay_days, created_at, last_verified_at, access_count, hmac_signature, is_stale)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            "INSERT INTO solution_vault (id, problem_signature, domain_language, winning_model, solution_code, context_and_constraints, objective_metrics, staleness_decay_days, created_at, last_verified_at, access_count, hmac_signature, valid_from, valid_until, supersedes)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
              ON CONFLICT(id) DO UPDATE SET
                  last_verified_at=excluded.last_verified_at,
-                 access_count=solution_vault.access_count + 1",
+                 access_count=solution_vault.access_count + 1,
+                 valid_from=excluded.valid_from,
+                 valid_until=excluded.valid_until,
+                 supersedes=excluded.supersedes",
             params![
                 s.id, s.problem_signature, s.domain_language, s.winning_model, s.solution_code,
-                s.context_and_constraints, metrics_json, s.staleness_score, s.staleness_decay_days,
-                s.created_at, s.last_verified_at, s.access_count, s.hmac_signature, if s.is_stale { 1 } else { 0 }
+                s.context_and_constraints, metrics_json, s.staleness_decay_days,
+                s.created_at, s.last_verified_at, s.access_count, s.hmac_signature,
+                s.valid_from, s.valid_until, s.supersedes
             ],
         )?;
         s_count += 1;

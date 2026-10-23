@@ -37,35 +37,61 @@ pub fn query_hybrid_codebase(
     project_name: &str,
     limit: usize,
 ) -> Result<Vec<HybridSearchResult>> {
-    // 1. Fetch semantic candidates
-    let mut sql = "SELECT id, file_path, file_name, chunk_type, name, code_content, summary, project_name, embedding FROM code_chunks".to_string();
-    
-    let mut semantic_candidates: Vec<(String, f64)> = Vec::new();
-    
-    if project_name.to_lowercase() != "all" {
-        sql.push_str(" WHERE project_name = ?1");
-        let mut stmt = conn.prepare(&sql)?;
-        let mut rows = stmt.query(rusqlite::params![project_name])?;
-        while let Some(row) = rows.next()? {
-            let r_id: String = row.get(0)?;
-            let blob_emb: Vec<u8> = row.get::<_, Option<Vec<u8>>>(8)?.unwrap_or_default();
-            let chunk_emb = blob_to_vector(&blob_emb);
-            let sim = cosine_similarity(query_embedding, &chunk_emb);
-            semantic_candidates.push((r_id, sim as f64));
-        }
-    } else {
-        let mut stmt = conn.prepare(&sql)?;
-        let mut rows = stmt.query([])?;
-        while let Some(row) = rows.next()? {
-            let r_id: String = row.get(0)?;
-            let blob_emb: Vec<u8> = row.get::<_, Option<Vec<u8>>>(8)?.unwrap_or_default();
-            let chunk_emb = blob_to_vector(&blob_emb);
-            let sim = cosine_similarity(query_embedding, &chunk_emb);
-            semantic_candidates.push((r_id, sim as f64));
+    // --- 0. PRE-VECTOR CANONICAL GATING LAYER ---
+    let clean_query = query_text.trim();
+    let mut canonical_ids: Vec<String> = Vec::new();
+    if !clean_query.is_empty() && clean_query.len() < 120 {
+        let mut canon_sql = "SELECT id FROM code_chunks WHERE (name = ?1 OR file_name = ?1)".to_string();
+        if project_name.to_lowercase() != "all" {
+            canon_sql.push_str(" AND project_name = ?2");
+            if let Ok(mut canon_stmt) = conn.prepare(&canon_sql) {
+                if let Ok(mut rows) = canon_stmt.query(rusqlite::params![clean_query, project_name]) {
+                    while let Ok(Some(row)) = rows.next() {
+                        if let Ok(id) = row.get(0) {
+                            canonical_ids.push(id);
+                        }
+                    }
+                }
+            }
+        } else if let Ok(mut canon_stmt) = conn.prepare(&canon_sql) {
+            if let Ok(mut rows) = canon_stmt.query(rusqlite::params![clean_query]) {
+                while let Ok(Some(row)) = rows.next() {
+                    if let Ok(id) = row.get(0) {
+                        canonical_ids.push(id);
+                    }
+                }
+            }
         }
     }
-    
-    semantic_candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    // 1. Fetch semantic candidates (only when embedding vector is provided)
+    let mut semantic_candidates: Vec<(String, f64)> = Vec::new();
+    if !query_embedding.is_empty() {
+        let mut sql = "SELECT id, file_path, file_name, chunk_type, name, code_content, summary, project_name, embedding FROM code_chunks".to_string();
+        if project_name.to_lowercase() != "all" {
+            sql.push_str(" WHERE project_name = ?1");
+            let mut stmt = conn.prepare(&sql)?;
+            let mut rows = stmt.query(rusqlite::params![project_name])?;
+            while let Some(row) = rows.next()? {
+                let r_id: String = row.get(0)?;
+                let blob_emb: Vec<u8> = row.get::<_, Option<Vec<u8>>>(8)?.unwrap_or_default();
+                let chunk_emb = blob_to_vector(&blob_emb);
+                let sim = cosine_similarity(query_embedding, &chunk_emb);
+                semantic_candidates.push((r_id, sim as f64));
+            }
+        } else {
+            let mut stmt = conn.prepare(&sql)?;
+            let mut rows = stmt.query([])?;
+            while let Some(row) = rows.next()? {
+                let r_id: String = row.get(0)?;
+                let blob_emb: Vec<u8> = row.get::<_, Option<Vec<u8>>>(8)?.unwrap_or_default();
+                let chunk_emb = blob_to_vector(&blob_emb);
+                let sim = cosine_similarity(query_embedding, &chunk_emb);
+                semantic_candidates.push((r_id, sim as f64));
+            }
+        }
+        semantic_candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    }
     
     // 2. Keyword FTS-like search (Multi-Term Tokenization)
     let fts_query = {
@@ -123,9 +149,14 @@ pub fn query_hybrid_codebase(
     
     // 3. RRF merge
     let mut rrf_scores: HashMap<String, f64> = HashMap::new();
+    // Pre-Vector Canonical Gating: Exact symbol/filename matches receive apex priority
+    for (rank, c_id) in canonical_ids.iter().enumerate() {
+        let score = 2.0 + (1.0 / (rank as f64 + 1.0));
+        rrf_scores.insert(c_id.clone(), score);
+    }
     for (rank, cand) in semantic_candidates.iter().enumerate() {
         let score = 1.0 / (60.0 + rank as f64 + 1.0);
-        rrf_scores.insert(cand.0.clone(), score);
+        *rrf_scores.entry(cand.0.clone()).or_insert(0.0) += score;
     }
     for (rank, r_id) in fts_ids.iter().enumerate() {
         let score = 1.0 / (60.0 + rank as f64 + 1.0);

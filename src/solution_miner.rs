@@ -126,6 +126,9 @@ pub fn scan_and_vault_repo_solutions(
                                 &format!("Mined from {}", cand.file_path),
                                 &metrics,
                                 90,
+                                None,
+                                None,
+                                None,
                             ) {
                                 vaulted_ids.push(id);
                             }

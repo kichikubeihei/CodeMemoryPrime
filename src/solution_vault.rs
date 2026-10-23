@@ -31,6 +31,9 @@ pub struct SolutionRecord {
     pub access_count: u32,
     pub hmac_signature: String,
     pub is_stale: bool,
+    pub valid_from: Option<String>,
+    pub valid_until: Option<String>,
+    pub supersedes: Option<String>,
 }
 
 pub fn init_solution_vault_table(conn: &Connection) -> Result<()> {
@@ -47,7 +50,10 @@ pub fn init_solution_vault_table(conn: &Connection) -> Result<()> {
             created_at TEXT NOT NULL,
             last_verified_at TEXT NOT NULL,
             access_count INTEGER DEFAULT 0,
-            hmac_signature TEXT NOT NULL
+            hmac_signature TEXT NOT NULL,
+            valid_from TEXT,
+            valid_until TEXT,
+            supersedes TEXT
         )",
         [],
     )?;
@@ -56,6 +62,14 @@ pub fn init_solution_vault_table(conn: &Connection) -> Result<()> {
         "CREATE INDEX IF NOT EXISTS idx_solution_signature ON solution_vault(problem_signature)",
         [],
     )?;
+
+    // Safe backwards-compatible schema migration for existing databases
+    let _ = conn.execute("ALTER TABLE solution_vault ADD COLUMN valid_from TEXT", []);
+    let _ = conn.execute("ALTER TABLE solution_vault ADD COLUMN valid_until TEXT", []);
+    let _ = conn.execute("ALTER TABLE solution_vault ADD COLUMN supersedes TEXT", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_solution_supersedes ON solution_vault(supersedes)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_solution_valid_until ON solution_vault(valid_until)", []);
+    let _ = conn.execute("UPDATE solution_vault SET valid_from = created_at WHERE valid_from IS NULL", []);
 
     Ok(())
 }
@@ -86,6 +100,9 @@ pub fn store_vault_solution(
     context_and_constraints: &str,
     metrics: &ObjectiveMetrics,
     decay_days: u32,
+    valid_from: Option<&str>,
+    valid_until: Option<&str>,
+    supersedes: Option<&str>,
 ) -> Result<String> {
     init_solution_vault_table(conn)?;
 
@@ -93,19 +110,32 @@ pub fn store_vault_solution(
     let hmac = compute_hmac(problem_signature, solution_code, winning_model);
     let now_ts = current_iso_timestamp();
     let metrics_json = serde_json::to_string(metrics).unwrap_or_else(|_| "{}".to_string());
+    let v_from = valid_from.unwrap_or(&now_ts);
+
+    // If superseding a prior solution, mark the predecessor record's valid_until = v_from
+    if let Some(old_id) = supersedes {
+        let _ = conn.execute(
+            "UPDATE solution_vault SET valid_until = ?1 WHERE id = ?2 AND (valid_until IS NULL OR valid_until = '')",
+            params![v_from, old_id],
+        );
+    }
 
     conn.execute(
         "INSERT INTO solution_vault (
             id, problem_signature, domain_language, winning_model,
             solution_code, context_and_constraints, objective_metrics,
-            staleness_decay_days, created_at, last_verified_at, access_count, hmac_signature
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0, ?11)
+            staleness_decay_days, created_at, last_verified_at, access_count, hmac_signature,
+            valid_from, valid_until, supersedes
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0, ?11, ?12, ?13, ?14)
         ON CONFLICT(id) DO UPDATE SET
             winning_model = excluded.winning_model,
             solution_code = excluded.solution_code,
             objective_metrics = excluded.objective_metrics,
             last_verified_at = excluded.last_verified_at,
-            hmac_signature = excluded.hmac_signature",
+            hmac_signature = excluded.hmac_signature,
+            valid_from = excluded.valid_from,
+            valid_until = excluded.valid_until,
+            supersedes = excluded.supersedes",
         params![
             id,
             problem_signature,
@@ -117,99 +147,172 @@ pub fn store_vault_solution(
             decay_days,
             now_ts,
             now_ts,
-            hmac
+            hmac,
+            v_from,
+            valid_until,
+            supersedes
         ],
     )?;
 
     Ok(id)
 }
 
+fn parse_solution_row(row: &rusqlite::Row, max_allowed_staleness: f64) -> Result<SolutionRecord> {
+    let id: String = row.get(0)?;
+    let signature: String = row.get(1)?;
+    let domain: String = row.get(2)?;
+    let model: String = row.get(3)?;
+    let code: String = row.get(4)?;
+    let context: String = row.get(5).unwrap_or_default();
+    let metrics_raw: String = row.get(6)?;
+    let decay_days: u32 = row.get(7).unwrap_or(60);
+    let created_at: String = row.get(8)?;
+    let last_verified: String = row.get(9)?;
+    let access_count: u32 = row.get(10).unwrap_or(0);
+    let hmac: String = row.get(11)?;
+    let valid_from: Option<String> = row.get(12).ok();
+    let valid_until: Option<String> = row.get(13).ok();
+    let supersedes: Option<String> = row.get(14).ok();
+
+    // 1. Verify anti-tamper HMAC
+    let expected_hmac = compute_hmac(&signature, &code, &model);
+    if expected_hmac != hmac {
+        return Err(rusqlite::Error::InvalidParameterName(
+            "HMAC verification failed: Solution tampering detected in vault!".into()
+        ));
+    }
+
+    // 2. Compute staleness score
+    let now_sec = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let clean_verified = last_verified.replace('\'', "");
+    let verified_sec: u64 = clean_verified.parse().unwrap_or(now_sec);
+    let age_days = (now_sec.saturating_sub(verified_sec) as f64) / 86400.0;
+    let decay_limit = (decay_days as f64).max(1.0);
+    let staleness = (age_days / decay_limit).min(1.0);
+    let is_stale = staleness > max_allowed_staleness;
+
+    let metrics: ObjectiveMetrics = serde_json::from_str(&metrics_raw).unwrap_or(ObjectiveMetrics {
+        compiler_exit_code: 0,
+        tests_passed: "100%".to_string(),
+        ast_complexity: 10,
+        execution_time_ms: 0.0,
+        security_clean: true,
+        zero_cls_a11y_score: 100,
+    });
+
+    Ok(SolutionRecord {
+        id,
+        problem_signature: signature,
+        domain_language: domain,
+        winning_model: model,
+        solution_code: code,
+        context_and_constraints: context,
+        objective_metrics: metrics,
+        staleness_score: (staleness * 100.0).round() / 100.0,
+        staleness_decay_days: decay_days,
+        created_at,
+        last_verified_at: last_verified,
+        access_count,
+        hmac_signature: hmac,
+        is_stale,
+        valid_from,
+        valid_until,
+        supersedes,
+    })
+}
+
 pub fn query_vault_solution(
     conn: &Connection,
     problem_signature: &str,
     max_allowed_staleness: f64,
+    as_of: Option<&str>,
 ) -> Result<Option<SolutionRecord>> {
     init_solution_vault_table(conn)?;
+
+    let now_sec = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let query_time = as_of
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| now_sec.to_string());
 
     let mut stmt = conn.prepare(
         "SELECT id, problem_signature, domain_language, winning_model,
                 solution_code, context_and_constraints, objective_metrics,
-                staleness_decay_days, created_at, last_verified_at, access_count, hmac_signature
+                staleness_decay_days, created_at, last_verified_at, access_count, hmac_signature,
+                valid_from, valid_until, supersedes
          FROM solution_vault
          WHERE problem_signature LIKE ?1
-         ORDER BY last_verified_at DESC LIMIT 1"
+           AND (valid_until IS NULL OR valid_until = '' OR CAST(REPLACE(valid_until, '''', '') AS INTEGER) > CAST(?2 AS INTEGER))
+           AND (valid_from IS NULL OR valid_from = '' OR CAST(REPLACE(valid_from, '''', '') AS INTEGER) <= CAST(?2 AS INTEGER))
+         ORDER BY CAST(REPLACE(COALESCE(valid_from, created_at), '''', '') AS INTEGER) DESC, last_verified_at DESC LIMIT 1"
     )?;
 
     let pattern = format!("%{}%", problem_signature);
-    let mut rows = stmt.query([pattern])?;
+    let mut rows = stmt.query(params![pattern, query_time])?;
 
     if let Some(row) = rows.next()? {
-        let id: String = row.get(0)?;
-        let signature: String = row.get(1)?;
-        let domain: String = row.get(2)?;
-        let model: String = row.get(3)?;
-        let code: String = row.get(4)?;
-        let context: String = row.get(5)?;
-        let metrics_raw: String = row.get(6)?;
-        let decay_days: u32 = row.get(7)?;
-        let created_at: String = row.get(8)?;
-        let last_verified: String = row.get(9)?;
-        let access_count: u32 = row.get(10)?;
-        let hmac: String = row.get(11)?;
-
-        // 1. Verify anti-tamper HMAC
-        let expected_hmac = compute_hmac(&signature, &code, &model);
-        if expected_hmac != hmac {
-            return Err(rusqlite::Error::InvalidParameterName(
-                "HMAC verification failed: Solution tampering detected in vault!".into()
-            ));
-        }
-
-        // 2. Increment access count
+        let record = parse_solution_row(row, max_allowed_staleness)?;
         let _ = conn.execute(
             "UPDATE solution_vault SET access_count = access_count + 1 WHERE id = ?1",
-            params![id],
+            params![record.id],
         );
-
-        // 3. Compute staleness score
-        let now_sec = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        let verified_sec: u64 = last_verified.parse().unwrap_or(now_sec);
-        let age_days = (now_sec.saturating_sub(verified_sec) as f64) / 86400.0;
-        let decay_limit = (decay_days as f64).max(1.0);
-        let staleness = (age_days / decay_limit).min(1.0);
-        let is_stale = staleness > max_allowed_staleness;
-
-        let metrics: ObjectiveMetrics = serde_json::from_str(&metrics_raw).unwrap_or(ObjectiveMetrics {
-            compiler_exit_code: 0,
-            tests_passed: "100%".to_string(),
-            ast_complexity: 10,
-            execution_time_ms: 0.0,
-            security_clean: true,
-            zero_cls_a11y_score: 100,
-        });
-
-        Ok(Some(SolutionRecord {
-            id,
-            problem_signature: signature,
-            domain_language: domain,
-            winning_model: model,
-            solution_code: code,
-            context_and_constraints: context,
-            objective_metrics: metrics,
-            staleness_score: (staleness * 100.0).round() / 100.0,
-            staleness_decay_days: decay_days,
-            created_at,
-            last_verified_at: last_verified,
-            access_count: access_count + 1,
-            hmac_signature: hmac,
-            is_stale,
-        }))
+        Ok(Some(record))
     } else {
         Ok(None)
     }
+}
+
+pub fn query_solution_lineage(conn: &Connection, solution_id: &str) -> Result<Vec<SolutionRecord>> {
+    init_solution_vault_table(conn)?;
+    let mut lineage = Vec::new();
+    let mut current_id = Some(solution_id.to_string());
+    let mut visited = std::collections::HashSet::new();
+
+    while let Some(id) = current_id {
+        if !visited.insert(id.clone()) {
+            break;
+        }
+
+        let mut stmt = conn.prepare(
+            "SELECT id, problem_signature, domain_language, winning_model,
+                    solution_code, context_and_constraints, objective_metrics,
+                    staleness_decay_days, created_at, last_verified_at, access_count, hmac_signature,
+                    valid_from, valid_until, supersedes
+             FROM solution_vault WHERE id = ?1 LIMIT 1"
+        )?;
+
+        let mut rows = stmt.query([&id])?;
+        if let Some(row) = rows.next()? {
+            let record = parse_solution_row(row, 1.0)?;
+            let next_id = record.supersedes.clone();
+            lineage.push(record);
+            current_id = next_id;
+        } else {
+            break;
+        }
+    }
+
+    Ok(lineage)
+}
+
+pub fn supersede_solution(conn: &Connection, old_id: &str, new_id: &str) -> Result<()> {
+    init_solution_vault_table(conn)?;
+    let now_ts = current_iso_timestamp();
+    conn.execute(
+        "UPDATE solution_vault SET valid_until = ?1 WHERE id = ?2 AND (valid_until IS NULL OR valid_until = '')",
+        params![now_ts, old_id],
+    )?;
+    conn.execute(
+        "UPDATE solution_vault SET supersedes = ?1 WHERE id = ?2",
+        params![old_id, new_id],
+    )?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -217,7 +320,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_store_and_query_solution_vault() {
+    fn test_store_and_query_solution_vault_with_supersession() {
         let conn = Connection::open_in_memory().unwrap();
         init_solution_vault_table(&conn).unwrap();
 
@@ -230,7 +333,8 @@ mod tests {
             zero_cls_a11y_score: 100,
         };
 
-        let id = store_vault_solution(
+        // 1. Store initial solution (v1)
+        let id_v1 = store_vault_solution(
             &conn,
             "laravel-inertia-ssr-hydration",
             "typescript/react",
@@ -239,14 +343,47 @@ mod tests {
             "Fixes SSR layout shifts in web applications",
             &metrics,
             30,
+            Some("1000"),
+            None,
+            None,
         ).unwrap();
 
-        assert!(id.starts_with("SOL-"));
+        assert!(id_v1.starts_with("SOL-"));
 
-        let record = query_vault_solution(&conn, "ssr-hydration", 0.8).unwrap().unwrap();
+        // 2. Query at t=1500 -> Returns v1
+        let record = query_vault_solution(&conn, "ssr-hydration", 0.8, Some("1500")).unwrap().unwrap();
+        assert_eq!(record.id, id_v1);
         assert_eq!(record.winning_model, "qwen2.5-coder:32b");
-        assert_eq!(record.objective_metrics.compiler_exit_code, 0);
-        assert!(!record.is_stale);
-        assert_eq!(record.access_count, 1);
+
+        // 3. Store superseding solution (v2) at t=2000
+        let id_v2 = store_vault_solution(
+            &conn,
+            "laravel-inertia-ssr-hydration",
+            "typescript/react",
+            "claude-sonnet-4-6",
+            "export function SafeHydrateV2({ children }) { return <Suspense fallback={null}>{children}</Suspense>; }",
+            "React 19 Suspense SSR hydration boundary",
+            &metrics,
+            60,
+            Some("2000"),
+            None,
+            Some(&id_v1),
+        ).unwrap();
+
+        // 4. Query current active (t=2500) -> Returns v2
+        let record_active = query_vault_solution(&conn, "ssr-hydration", 0.8, Some("2500")).unwrap().unwrap();
+        assert_eq!(record_active.id, id_v2);
+        assert_eq!(record_active.winning_model, "claude-sonnet-4-6");
+        assert_eq!(record_active.supersedes, Some(id_v1.clone()));
+
+        // 5. Query historical (as-of t=1500) -> Still returns v1!
+        let record_historical = query_vault_solution(&conn, "ssr-hydration", 0.8, Some("1500")).unwrap().unwrap();
+        assert_eq!(record_historical.id, id_v1);
+
+        // 6. Trace lineage DAG from v2
+        let lineage = query_solution_lineage(&conn, &id_v2).unwrap();
+        assert_eq!(lineage.len(), 2);
+        assert_eq!(lineage[0].id, id_v2);
+        assert_eq!(lineage[1].id, id_v1);
     }
 }

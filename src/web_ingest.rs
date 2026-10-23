@@ -134,13 +134,18 @@ pub fn analyze_doc_with_local_llm(url_or_text: &str, endpoint: Option<&str>) -> 
 
     let prompt = format!(
         "Analyze the following web document content. Extract key takeaways, core technical points, and main recommendations in concise bullet points:\n\n{}",
-        &url_or_text[..url_or_text.len().min(4000)]
+        &url_or_text[..url_or_text.len().min(16000)]
     );
 
     let payload = json!({
         "model": "qwen2.5-coder:14b",
         "prompt": prompt,
-        "stream": false
+        "stream": false,
+        "keep_alive": "24h",
+        "options": {
+            "num_ctx": 16384,
+            "temperature": 0.2
+        }
     });
 
     let res = rt.block_on(async {
