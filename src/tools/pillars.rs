@@ -382,8 +382,11 @@ fn handle_cmp_architect(params: &Value, _rt: &Runtime) -> String {
             };
 
             if let Ok(conn) = Connection::open(&db_path) {
+                let valid_from = params.get("valid_from").and_then(|s| s.as_str());
+                let valid_until = params.get("valid_until").and_then(|s| s.as_str());
+                let supersedes = params.get("supersedes").and_then(|s| s.as_str());
                 match crate::solution_vault::store_vault_solution(
-                    &conn, sig, domain, approach, code, context, &metrics, 90
+                    &conn, sig, domain, approach, code, context, &metrics, 90, valid_from, valid_until, supersedes
                 ) {
                     Ok(id) => json!({ "status": "success", "solution_vault_id": id, "action": "solution_vaulted" }).to_string(),
                     Err(e) => json!({ "error": e.to_string() }).to_string(),
@@ -394,8 +397,9 @@ fn handle_cmp_architect(params: &Value, _rt: &Runtime) -> String {
         }
         "query_solution_vault" => {
             let query = params.get("query_term").and_then(|s| s.as_str()).unwrap_or("");
+            let as_of = params.get("as_of").and_then(|s| s.as_str());
             if let Ok(conn) = Connection::open(&db_path) {
-                match crate::solution_vault::query_vault_solution(&conn, query, 0.8) {
+                match crate::solution_vault::query_vault_solution(&conn, query, 0.8, as_of) {
                     Ok(Some(record)) => json!({ "status": "success", "solutions_count": 1, "solution": record }).to_string(),
                     Ok(None) => json!({ "status": "success", "solutions_count": 0, "solutions": [] }).to_string(),
                     Err(e) => json!({ "error": e.to_string() }).to_string(),
