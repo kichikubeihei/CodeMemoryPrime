@@ -71,7 +71,7 @@ pub fn save_ringer_cache(model: &str, prompt: &str, response: &str) {
         let _ = conn.execute(
             "INSERT OR REPLACE INTO llm_query_cache (prompt_hash, model, prompt_text, response_text, timestamp, tokens_saved)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            rusqlite::params![hash, model, prompt, response, timestamp, tokens_saved],
+            rusqlite::params![hash, model, "[REDACTED_PROMPT_HASH_PROTECTED]", response, timestamp, tokens_saved],
         );
         info!("💾 [Level 3 Ringer Cache STORE] Saved response for hash {} into SQLite Ringer Cache", &hash[..8]);
     }
