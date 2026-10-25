@@ -47,6 +47,7 @@ pub mod worktree_manager;
 pub mod domain_gates;
 pub mod grimoire;
 pub mod installer;
+pub mod persona_catalog;
 
 pub fn get_db_path() -> String {
     let base = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
