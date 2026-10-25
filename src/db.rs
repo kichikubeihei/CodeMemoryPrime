@@ -301,6 +301,9 @@ pub fn init_database(db_path: &str) -> Result<()> {
     // 18. Living Agent Personas & Rule Sets Catalog (Harness^2 Scaffolding Evolution)
     crate::persona_catalog::init_persona_table(&conn)?;
 
+    // 19. Strategic Agent Squads Catalog (Dialectic Triad, Swarm Arena, Relay Pipeline)
+    crate::squad_catalog::init_squad_table(&conn)?;
+
     Ok(())
 }
 
