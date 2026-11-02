@@ -7,6 +7,9 @@
 
 **CodeMemoryPrime Core (`cmp`)** is a bare-metal, high-performance Rust memory, graph, and AST intelligence engine for AI coding assistants. It equips agents across **Claude Desktop, Cursor, Windsurf, Claude Code CLI, VS Code (Roo Code / Cline), and Google Antigravity** with **persistent architectural memory, sub-millisecond AST symbol discovery, proactive dead-end interception, and 70–85% token-quota reduction**.
 
+🌐 **Official Website & Pro Edition**: [https://codememoryprime.com](https://codememoryprime.com)  
+📖 **Step-by-Step Beginner Setup Guide**: [BEGINNER_SETUP_GUIDE.md](BEGINNER_SETUP_GUIDE.md)
+
 ---
 
 ## ⚡ 1-Command Universal Installation
@@ -271,12 +274,18 @@ cargo test
 | **Rust Token Killer (`execute_and_bound_cmd`, `bound_shell_output`) & Anti-Slop Pruning** | ✅ | ✅ |
 | **UI Design Studio, A11y / Zero-CLS Auditor & Adversarial Test Generation** | ✅ | ✅ |
 | **1-Command Universal IDE Auto-Installer (`cmp install --all` & `scripts/install.sh`)** | ✅ | ✅ |
-| **Tailscale $0.00 Ollama GPU Roster Discovery (`sync_memory`)** | ✅ | ✅ |
+| **Tailscale / Local $0.00 Ollama GPU Roster Discovery (`sync_memory`)** | ✅ | ✅ |
+| **Bifrost Dual-Brain Semantic Codec (`bifrost-wire` — 70–85% Cloud Token Compression via Local GPU)** | ❌ | ✅ |
+| **Bifrost Shorthand Transpiler (`bifrost-dsl` — Zero-Token `!SM` / `!PIPE` / `!WAL` Compiler & Split-Screen TUI)** | ❌ | ✅ |
+| **24/7 Autonomous Knowledge Gardener (`cmp-gardener` — Background AST Indexing, Dead-End Pruning & Test Synthesis)** | ❌ | ✅ |
+| **AgentShell Asymmetric Cockpit (`agentshell` — Flight Recorder, Error Slicer & Local Persona Bank)** | ❌ | ✅ |
 | **Accelerated CSA-Doc Shorthand Pipeline & Batch Video/URL Distillation (`cmp-ingest`)** | ❌ | ✅ |
 | **Headless Autonomous Worktree Execution Daemon (`cmp-worker`) & Firstmate Worktrees** | ❌ | ✅ |
 | **Spynel Real-Time Web Mission Control UI (`cmp-control` on Port 7799)** | ❌ | ✅ |
 | **Cross-Terminal Multi-Agent Swarm Event Bus & Automated Cloudflare R2 / Mesh Daemon** | ❌ | ✅ |
 | **Low-Level C-ABI (`grimoire.h`), BVH/SPSC SIMD Headers & Dynamic Exploit Verification** | ❌ | ✅ |
+
+> 🌐 **Explore CodeMemoryPrime & Pro at [codememoryprime.com](https://codememoryprime.com)**
 
 ---
 

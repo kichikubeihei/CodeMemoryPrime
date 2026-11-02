@@ -50,8 +50,34 @@ pub mod installer;
 pub mod persona_catalog;
 pub mod squad_catalog;
 
+pub fn get_home_dir() -> String {
+    if let Ok(home) = std::env::var("HOME") {
+        if !home.is_empty() {
+            return home;
+        }
+    }
+    if let Ok(profile) = std::env::var("USERPROFILE") {
+        if !profile.is_empty() {
+            return profile;
+        }
+    }
+    std::env::temp_dir().to_string_lossy().to_string()
+}
+
+pub fn get_ollama_host() -> String {
+    std::env::var("OLLAMA_HOST")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "http://localhost:11434".to_string())
+}
+
 pub fn get_db_path() -> String {
-    let base = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    if let Ok(custom) = std::env::var("CMP_DB_PATH") {
+        if !custom.trim().is_empty() {
+            return custom;
+        }
+    }
+    let base = get_home_dir();
     let new_path = format!("{}/.codememory_prime.db", base);
     let old_path = format!("{}/.coder_memory.db", base);
     if !std::path::Path::new(&new_path).exists() && std::path::Path::new(&old_path).exists() {

@@ -114,8 +114,14 @@ pub fn verify_gate_completion(project_name: &str, gate_id: &str) -> Result<TaskG
 
     let (task_name, gate_name, command, expected_code) = row;
 
-    let shell = if cfg!(target_os = "macos") { "zsh" } else { "sh" };
-    let output = match Command::new(shell).arg("-c").arg(&command).output() {
+    let (shell, flag) = if cfg!(target_os = "windows") {
+        ("cmd", "/C")
+    } else if cfg!(target_os = "macos") {
+        ("zsh", "-c")
+    } else {
+        ("sh", "-c")
+    };
+    let output = match Command::new(shell).arg(flag).arg(&command).output() {
         Ok(out) => {
             let combined = format!("{}\n{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
             let code = out.status.code().unwrap_or(-1);

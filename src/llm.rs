@@ -169,7 +169,8 @@ pub async fn speculative_generate_with_draft(
     draft_model: Option<&str>,
     base_url: Option<&str>,
 ) -> Result<String> {
-    let host = base_url.unwrap_or("http://100.102.233.128:11434");
+    let default_host = crate::get_ollama_host();
+    let host = base_url.unwrap_or(&default_host);
     let target = target_model.unwrap_or("qwen2.5-coder:32b");
     let draft = draft_model.unwrap_or("qwen2.5-coder:1.5b");
 

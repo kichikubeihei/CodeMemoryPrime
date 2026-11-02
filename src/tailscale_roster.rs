@@ -26,13 +26,14 @@ pub fn sync_tailscale_model_roster(
     endpoint: Option<&str>,
     gemini_md_path: Option<&str>,
 ) -> std::result::Result<RosterSyncResult, String> {
-    let host = endpoint.unwrap_or("http://127.0.0.1:11434");
+    let default_host = crate::get_ollama_host();
+    let host = endpoint.unwrap_or(&default_host);
     let md_path = gemini_md_path.unwrap_or_else(|| {
         // default to ~/.gemini/config/GEMINI.md
         Box::leak(
             format!(
                 "{}/.gemini/config/GEMINI.md",
-                std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string())
+                crate::get_home_dir()
             )
             .into_boxed_str(),
         )

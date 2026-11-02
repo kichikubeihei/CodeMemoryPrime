@@ -142,8 +142,15 @@ pub fn run_worktree_gauntlet_and_merge(
 
     if let Some(cmd_str) = test_command {
         if !cmd_str.trim().is_empty() {
-            let out = Command::new("zsh")
-                .arg("-c")
+            let (shell, flag) = if cfg!(target_os = "windows") {
+                ("cmd", "/C")
+            } else if cfg!(target_os = "macos") {
+                ("zsh", "-c")
+            } else {
+                ("sh", "-c")
+            };
+            let out = Command::new(shell)
+                .arg(flag)
                 .arg(cmd_str)
                 .current_dir(&worktree_dir)
                 .output()
