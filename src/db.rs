@@ -1,12 +1,58 @@
 use rusqlite::{Connection, Result};
 use std::path::Path;
+use std::time::Duration;
 
-pub fn init_database(db_path: &str) -> Result<()> {
+/// Opens a SQLite connection with high-concurrency WAL mode, 10s busy timeout, and memory temp store.
+/// This prevents database lock contention across multiple concurrent AI agents and subagents.
+pub fn open_db(db_path: &str) -> Result<Connection> {
     if let Some(parent) = Path::new(db_path).parent() {
         std::fs::create_dir_all(parent).unwrap_or(());
     }
-    
+
     let conn = Connection::open(db_path)?;
+    conn.busy_timeout(Duration::from_millis(10_000))?;
+    let _ = conn.execute_batch(
+        "PRAGMA journal_mode = WAL;
+         PRAGMA busy_timeout = 10000;
+         PRAGMA synchronous = NORMAL;
+         PRAGMA temp_store = MEMORY;",
+    );
+    Ok(conn)
+}
+
+/// Executes a database write closure with automatic exponential backoff retry.
+/// The connection is opened only for the duration of the write and dropped immediately,
+/// ensuring that agents never hold SQLite database locks open.
+pub fn retry_db_write<T, F>(db_path: &str, max_retries: usize, op: F) -> Result<T>
+where
+    F: Fn(&Connection) -> Result<T>,
+{
+    let mut attempts = 0;
+    let mut delay_ms = 50;
+    loop {
+        let conn = open_db(db_path)?;
+        match op(&conn) {
+            Ok(val) => {
+                drop(conn);
+                return Ok(val);
+            }
+            Err(e) => {
+                drop(conn);
+                let err_str = e.to_string();
+                if (err_str.contains("locked") || err_str.contains("busy")) && attempts < max_retries {
+                    attempts += 1;
+                    std::thread::sleep(Duration::from_millis(delay_ms));
+                    delay_ms = (delay_ms * 2).min(1000);
+                } else {
+                    return Err(e);
+                }
+            }
+        }
+    }
+}
+
+pub fn init_database(db_path: &str) -> Result<()> {
+    let conn = open_db(db_path)?;
     
     // 1. Code chunks table
     conn.execute(
